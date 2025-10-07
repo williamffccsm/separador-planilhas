@@ -1,0 +1,14 @@
+﻿__pycache__/
+*.py[cod]
+*.log
+.env
+.venv/
+build/
+dist/
+*.spec
+dist_installer/
+*.exe
+*.msi
+*.zip
+*.7z
+Output/

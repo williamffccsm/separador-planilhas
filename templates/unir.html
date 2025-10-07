@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Meta tags para codificação e responsividade -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planilhex: Automatizando Planilhas - Unir</title>
+    <meta name="description" content="Página para unir planilhas">
+    <!-- Inclusão da biblioteca Lucide para ícones -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* --- Variáveis de Design (Paleta de Cores) --- */
+        :root {
+            --neon-green: #00ff00;
+            --text-color: #f5f5f5;
+            --bg-translucent: rgba(255, 255, 255, 0.03);
+            --border-translucent: rgba(255, 255, 255, 0.1);
+            --neon-shadow: 0 0 15px rgba(0, 255, 0, 0.4);
+            --error-bg: rgba(255, 50, 50, 0.15);
+            --error-border: rgba(255, 50, 50, 0.3);
+            --neon-red: #ff3333; /* Adicionado para o botão de sair */
+        }
+
+        /* --- Estilo Base --- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #000000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            color: var(--text-color);
+        }
+
+        /* --- Container Principal (Responsivo) --- */
+        .container {
+            background: var(--bg-translucent);
+            border-radius: 1.5rem;
+            box-shadow: 
+                0 0 25px rgba(255, 255, 255, 0.1),
+                0 0 50px rgba(0, 255, 0, 0.05),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            width: fit-content; 
+            max-width: 95vw; 
+            border: 1px solid var(--border-translucent);
+            backdrop-filter: blur(20px);
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
+            opacity: 0.6;
+        }
+
+        .container:hover {
+            box-shadow: 
+                0 0 35px rgba(255, 255, 255, 0.15),
+                0 0 70px rgba(0, 255, 0, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            border-color: rgba(0, 255, 0, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .content {
+            padding: 2.5rem;
+        }
+
+        /* --- Cabeçalho com Nome do App --- */
+        .header {
+            text-align: center;
+            margin-bottom: 1rem;
+        }
+
+        .app-name h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--text-color);
+            text-shadow: 
+                0 0 20px rgba(0, 255, 0, 0.3),
+                0 2px 4px rgba(0, 0, 0, 0.8);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #ffffff, var(--neon-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .app-name p {
+            font-size: 0.95rem;
+            color: rgba(245, 245, 245, 0.8);
+            font-weight: 300;
+            letter-spacing: 1px;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        }
+
+        /* --- Nome da Página --- */
+        .page-title {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .page-title h2 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: var(--text-color);
+            text-shadow: 
+                0 0 15px rgba(0, 255, 0, 0.3),
+                0 2px 4px rgba(0, 0, 0, 0.8);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #ffffff, var(--neon-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* --- Menu Principal --- */
+        .main-menu {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: nowrap;
+            width: 100%;
+            margin-bottom: 1rem;
+        }
+
+        .main-menu a {
+            background: var(--bg-translucent);
+            border: 1px solid var(--border-translucent);
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem;
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .main-menu a::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .main-menu a:hover::before {
+            left: 100%;
+        }
+
+        .main-menu a:hover {
+            background: linear-gradient(135deg, rgba(0, 255, 0, 0.15), rgba(0, 255, 0, 0.25));
+            border-color: var(--neon-green);
+            box-shadow: var(--neon-shadow), 0 5px 15px rgba(0, 255, 0, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .main-menu a.logout-btn:hover {
+            background: linear-gradient(135deg, rgba(255, 51, 51, 0.15), rgba(255, 51, 51, 0.25));
+            border-color: var(--neon-red);
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.4), 0 5px 15px rgba(255, 51, 51, 0.2);
+        }
+
+        /* --- Seção de Upload e Formulário --- */
+        .upload-section {
+            margin-top: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .upload-btn {
+            background: var(--bg-translucent);
+            border: 1px dashed var(--border-translucent);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .upload-btn:hover {
+            background: rgba(0, 255, 0, 0.1);
+            border-color: var(--neon-green);
+            box-shadow: var(--neon-shadow);
+        }
+
+        .output-name, .format-select {
+            width: 100%;
+            padding: 1rem;
+            border: 1px solid var(--border-translucent);
+            border-radius: 0.75rem;
+            background: rgba(0, 0, 0, 0.6);
+            color: var(--text-color);
+            font-size: 0.95rem;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .output-name:focus, .format-select:focus {
+            border-color: var(--neon-green);
+            background: rgba(0, 0, 0, 0.8);
+            box-shadow: var(--neon-shadow), inset 0 1px 3px rgba(0, 0, 0, 0.3);
+            outline: none;
+        }
+
+        /* === CSS ADICIONADO PARA A LISTA DE ARQUIVOS === */
+        #fileListContainer {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+        .file-item {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-translucent);
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.9rem;
+            transition: background 0.3s;
+        }
+        .file-item:hover {
+            background: rgba(0, 255, 0, 0.05);
+            border-color: rgba(0, 255, 0, 0.2);
+        }
+        .file-counter {
+            font-weight: 600;
+            color: var(--neon-green);
+        }
+        .file-name {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        #clearFileList {
+            color: var(--neon-red);
+            font-size: 0.8rem;
+            text-align: right;
+            cursor: pointer;
+            text-decoration: none;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+        }
+        #clearFileList:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
+        /* === FIM DO CSS ADICIONADO === */
+
+        /* --- Botão Unir --- */
+        .unir-btn {
+            background: linear-gradient(135deg, var(--bg-translucent), rgba(0, 255, 0, 0.1));
+            color: var(--text-color);
+            padding: 1rem 2rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            font-size: 1rem;
+            border: 1px solid var(--border-translucent);
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .unir-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.2), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .unir-btn:hover::before {
+            left: 100%;
+        }
+
+        .unir-btn:hover {
+            background: linear-gradient(135deg, rgba(0, 255, 0, 0.15), rgba(0, 255, 0, 0.25));
+            border-color: var(--neon-green);
+            box-shadow: var(--neon-shadow), 0 5px 15px rgba(0, 255, 0, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .unir-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* --- Área de Progresso --- */
+        .progress-area {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: var(--bg-translucent);
+            border: 1px solid var(--border-translucent);
+            text-align: center;
+            min-height: 4rem;
+            display: none;
+        }
+
+        .progress-area.show {
+            display: block;
+        }
+
+        /* --- Mensagem de Sucesso --- */
+        .success-message {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid var(--neon-green);
+            text-align: center;
+            color: var(--text-color);
+            display: none;
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .fireworks {
+            position: relative;
+            width: 100%;
+            height: 100px;
+            overflow: hidden;
+        }
+
+        .firework {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            background: var(--neon-green);
+            border-radius: 50%;
+            animation: explode 1s ease-out forwards;
+            box-shadow: 0 0 10px var(--neon-green), 0 0 20px var(--neon-green);
+        }
+
+        @keyframes explode {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(10); opacity: 0; }
+        }
+
+        /* --- Área de Download --- */
+        .download-area {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            background: var(--bg-translucent);
+            border: 1px solid var(--border-translucent);
+            text-align: center;
+            display: none;
+        }
+
+        .download-area.show {
+            display: block;
+        }
+
+        @media (max-width: 850px) {
+            .content {
+                padding: 2rem 1.5rem;
+            }
+            .app-name h1 {
+                font-size: 2rem;
+            }
+            .page-title h2 {
+                font-size: 1.25rem;
+            }
+            .main-menu {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .main-menu a {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="content">
+            <header class="header">
+                <div class="app-name">
+                    <h1>Planilhex</h1>
+                    <p>Automatizando Planilhas</p>
+                </div>
+            </header>
+<!-- Navegação com o menu principal -->
+            <nav class="main-menu">
+                <a href="/home">Home</a>
+                <a href="/unir.html">Unir Planilhas</a>
+                <a href="/dividir.html">Particionar Planilhas</a>
+                <a href="/cruzar.html">Cruzar Dados</a>
+                <a href="/separar_por_coluna.html">Separar por Coluna</a>
+                <a href="/duplicados.html">Duplicados por Coluna</a>
+                <a href="/logout" class="logout-btn">Sair</a>
+            </nav>
+
+            <div class="page-title">
+                <h2>Unir Planilhas</h2>
+            </div>
+            
+            <form id="unirForm" class="upload-section">
+                <label class="upload-btn">
+                    <span>+ Adicionar Planilhas</span>
+                    <input type="file" id="fileInput" accept=".xlsx, .csv" multiple style="display: none;">
+                </label>
+                <input type="text" id="outputName" class="output-name" placeholder="Nome do arquivo de saída" required>
+                <select id="formatSelect" class="format-select">
+                    <option value="xlsx">Excel (.xlsx)</option>
+                    <option value="csv">CSV (.csv)</option>
+                    <option value="xls">Excel 97-2003 (.xls)</option>
+                    <option value="ods">OpenDocument (.ods)</option>
+                </select>
+                
+                <div id="fileListContainer"></div>
+                <!-- === HTML ADICIONADO === -->
+                <a href="#" id="clearFileList" style="display: none;">Limpar Lista</a>
+
+                <button type="submit" id="unirBtn" class="unir-btn" disabled>UNIR</button>
+            </form>
+
+            <div id="progressArea" class="progress-area">
+                <p id="progressText">Aguarde, unindo planilhas...</p>
+            </div>
+            <div id="successMessage" class="success-message">
+                <p>Sucesso! Planilhas unidas com sucesso!</p>
+                <div id="fireworks" class="fireworks"></div>
+            </div>
+            <div id="downloadArea" class="download-area">
+                <p>Arquivo unido baixado com sucesso! Clique para baixar novamente:</p>
+                <a id="downloadLink" href="#" download>Download</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        const unirForm = document.getElementById('unirForm');
+        const fileInput = document.getElementById('fileInput');
+        const outputName = document.getElementById('outputName');
+        const formatSelect = document.getElementById('formatSelect');
+        const unirBtn = document.getElementById('unirBtn');
+        const progressArea = document.getElementById('progressArea');
+        const progressText = document.getElementById('progressText');
+        const successMessage = document.getElementById('successMessage');
+        const fireworks = document.getElementById('fireworks');
+        const downloadArea = document.getElementById('downloadArea');
+        const downloadLink = document.getElementById('downloadLink');
+        const fileListContainer = document.getElementById('fileListContainer');
+        const clearFileListLink = document.getElementById('clearFileList');
+        
+        let selectedFiles = [];
+
+        function checkInputs() {
+            unirBtn.disabled = selectedFiles.length === 0 || !outputName.value.trim();
+        }
+
+        function updateFileList() {
+            fileListContainer.innerHTML = '';
+            if (selectedFiles.length > 0) {
+                selectedFiles.forEach((file, index) => {
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <span class="file-counter">${index + 1}</span>
+                        <span class="file-name">${file.name}</span>
+                    `;
+                    fileListContainer.appendChild(fileItem);
+                });
+                clearFileListLink.style.display = 'block';
+            } else {
+                clearFileListLink.style.display = 'none';
+            }
+        }
+        
+        fileInput.addEventListener('change', (event) => {
+            const newFiles = Array.from(event.target.files);
+            // cria uma chave única por arquivo (name + size + lastModified)
+            const key = f => `${f.name}__${f.size}__${f.lastModified}`;
+            const atuais = new Set(selectedFiles.map(key));
+            newFiles.forEach(f => {
+                const k = key(f);
+                if (!atuais.has(k)) {
+                    selectedFiles.push(f);
+                    atuais.add(k);
+                }
+            });
+            fileInput.value = '';
+            updateFileList();
+            checkInputs();
+        });
+        
+        outputName.addEventListener('input', checkInputs);
+
+        clearFileListLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            selectedFiles = [];
+            updateFileList();
+            checkInputs();
+        });
+        
+        unirForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            if (selectedFiles.length === 0) {
+                alert("Por favor, selecione pelo menos um arquivo.");
+                return;
+            }
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files[]', file);
+            });
+            const outputFileName = `${outputName.value.trim() || 'unido'}.${formatSelect.value}`;
+            formData.append('nome_saida_uniao', outputFileName);
+            
+            progressArea.classList.add('show');
+            successMessage.classList.remove('show');
+            downloadArea.classList.remove('show');
+            progressText.textContent = 'Aguarde, enviando e unindo planilhas...';
+            unirBtn.disabled = true;
+            
+            // Ação de fetch para o backend
+            fetch("/process/unir", { // Usar o caminho direto é mais seguro que o Jinja aqui.
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                // Se a resposta NÃO for OK (ex: erro 400 ou 500)
+                if (!response.ok) {
+                    // Tentamos ler a resposta como JSON para pegar a mensagem de erro
+                    return response.json().then(errData => {
+                        // Lançamos um erro com a mensagem que o backend enviou
+                        throw new Error(errData.error || `Erro ${response.status}: ${response.statusText}`);
+                    }).catch(() => {
+                        // Se a resposta de erro não for JSON, lançamos um erro genérico
+                        throw new Error(`Erro inesperado do servidor: ${response.status}`);
+                    });
+                }
+
+                // Se a resposta for OK, continuamos com o processo de download
+                const disposition = response.headers.get('Content-Disposition');
+                let filename = outputFileName;
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+                return response.blob().then(blob => ({ blob, filename }));
+            })
+            .then(({ blob, filename }) => {
+                const url = window.URL.createObjectURL(blob);
+
+                // cria âncora no DOM, clica e remove (mais compatível com WebView)
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename || 'arquivo_unido';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+
+                // libera URL blob
+                setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+
+                progressArea.classList.remove('show');
+                successMessage.classList.add('show');
+                createFireworks();
+                downloadArea.classList.add('show');
+
+                // também atualiza o link "Download" visível
+                downloadLink.href = url;
+                downloadLink.download = filename || 'arquivo_unido';
+            })
+            .catch(error => {
+                // Agora, este 'catch' vai receber a mensagem de erro específica que lançamos acima
+                console.error('Erro no envio:', error);
+                progressArea.classList.add('show'); // Mantém a área visível para mostrar o erro
+                progressText.textContent = `Erro: ${error.message}. Tente novamente.`;
+            })
+            .finally(() => {
+                unirBtn.disabled = false;
+            });
+        });
+
+        function createFireworks() {
+            fireworks.innerHTML = '';
+            for (let i = 0; i < 20; i++) {
+                const firework = document.createElement('div');
+                firework.className = 'firework';
+                firework.style.left = `${Math.random() * 100}%`;
+                firework.style.top = `${Math.random() * 50}%`;
+                fireworks.appendChild(firework);
+                setTimeout(() => firework.remove(), 1000);
+            }
+        }
+    });
+</script>
+</body>
+</html>

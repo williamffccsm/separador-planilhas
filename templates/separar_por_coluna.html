@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Planilhex: Separar por Coluna</title>
+  <meta name="description" content="Página para separar planilhas por coluna">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root{
+      --neon-green:#00ff00;--text-color:#f5f5f5;--bg-translucent:rgba(255,255,255,.03);
+      --border-translucent:rgba(255,255,255,.1);--neon-shadow:0 0 15px rgba(0,255,0,.4);
+      --error-bg:rgba(255,50,50,.15);--error-border:rgba(255,50,50,.3);--neon-red:#ff3333
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:1.5rem;font-family:'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text-color)}
+    .container{background:var(--bg-translucent);border-radius:1.5rem;box-shadow:0 0 25px rgba(255,255,255,.1),0 0 50px rgba(0,255,0,.05),inset 0 1px 0 rgba(255,255,255,.1);width:fit-content;max-width:95vw;border:1px solid var(--border-translucent);backdrop-filter:blur(20px);position:relative;transition:all .4s cubic-bezier(.4,0,.2,1);overflow:hidden}
+    .container:hover{box-shadow:0 0 35px rgba(255,255,255,.15),0 0 70px rgba(0,255,0,.1),inset 0 1px 0 rgba(255,255,255,.2);border-color:rgba(0,255,0,.3);transform:translateY(-2px)}
+    .content{padding:2.5rem}
+    .header{text-align:center;margin-bottom:1rem}
+    .app-name h1{font-size:2.5rem;font-weight:700;color:var(--text-color);text-shadow:0 0 20px rgba(0,255,0,.3),0 2px 4px rgba(0,0,0,.8);letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem;background:linear-gradient(135deg,#fff,var(--neon-green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .app-name p{font-size:.95rem;color:rgba(245,245,245,.8);font-weight:300;letter-spacing:1px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .main-menu{display:flex;justify-content:center;gap:1rem;flex-wrap:nowrap;width:100%;margin-bottom:1rem}
+    .main-menu a{background:var(--bg-translucent);border:1px solid var(--border-translucent);border-radius:.75rem;padding:1rem 1.5rem;color:var(--text-color);text-decoration:none;font-weight:600;font-size:1rem;transition:all .3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;gap:.75rem;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:1px;text-transform:uppercase;position:relative;overflow:hidden;white-space:nowrap}
+    .main-menu a::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,0,.2),transparent);transition:left .5s ease}
+    .main-menu a:hover::before{left:100%}
+    .main-menu a:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);transform:translateY(-2px)}
+    .main-menu a.logout-btn:hover{background:linear-gradient(135deg,rgba(255,51,51,.15),rgba(255,51,51,.25));border-color:var(--neon-red);box-shadow:0 0 15px rgba(255,51,51,.4),0 5px 15px rgba(255,51,51,.2)}
+    .page-title{text-align:center;margin-bottom:1.5rem}
+    .page-title h2{font-size:1.75rem;font-weight:600;color:var(--text-color);text-shadow:0 0 15px rgba(0,255,0,.3),0 2px 4px rgba(0,0,0,.8);letter-spacing:1.5px;text-transform:uppercase;background:linear-gradient(135deg,#fff,var(--neon-green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .form-section{margin-top:2rem;display:flex;flex-direction:column;gap:1.5rem}
+    .form-group{display:flex;flex-direction:column}
+    .label-outside{color:var(--text-color);font-size:.9rem;margin-bottom:.5rem}
+    .upload-btn{background:var(--bg-translucent);border:1px dashed var(--border-translucent);border-radius:.75rem;padding:1.5rem;text-align:center;cursor:pointer;transition:all .3s ease;color:var(--text-color);font-weight:600;text-transform:uppercase;display:flex;align-items:center;justify-content:center}
+    .upload-btn:hover{background:rgba(0,255,0,.1);border-color:var(--neon-green);box-shadow:var(--neon-shadow)}
+    .form-section input,.form-section select,.form-section button{width:100%;padding:1rem;border:1px solid var(--border-translucent);border-radius:.75rem;background:rgba(0,0,0,.6);color:var(--text-color);font-size:.95rem;transition:all .3s cubic-bezier(.4,0,.2,1)}
+    .form-section input:focus,.form-section select:focus{border-color:var(--neon-green);background:rgba(0,0,0,.8);box-shadow:var(--neon-shadow),inset 0 1px 3px rgba(0,0,0,.3);outline:none}
+    .form-section button{background:linear-gradient(135deg,var(--bg-translucent),rgba(0,255,0,.1));font-weight:600;text-transform:uppercase;cursor:pointer}
+    .form-section button:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);transform:translateY(-2px)}
+    .form-section button:disabled{opacity:.7;cursor:not-allowed;transform:none}
+    .message-area{margin-top:1.5rem;padding:1rem;border-radius:.75rem;background:var(--bg-translucent);border:1px solid var(--border-translucent);text-align:center;display:none}
+    .message-area.show{display:block}
+    .alert{padding:.75rem;border-radius:.5rem;font-size:.9rem}
+    .alert-success{background:rgba(0,255,0,.1);border:1px solid var(--neon-green);color:var(--text-color)}
+    .alert-danger{background:var(--error-bg);border:1px solid var(--error-border);color:var(--text-color)}
+    .file-item{background:rgba(0,0,0,.4);border:1px solid var(--border-translucent);padding:.75rem 1rem;border-radius:.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;font-size:.9rem;transition:background .3s}
+    .file-item:hover{background:rgba(0,255,0,.05);border-color:rgba(0,255,0,.2)}
+    .file-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,.8);flex-grow:1}
+    .clear-file-btn{color:var(--neon-red);font-size:.8rem;cursor:pointer;text-decoration:none;opacity:.7;transition:opacity .3s;white-space:nowrap}
+    .clear-file-btn:hover{opacity:1;text-decoration:underline}
+    @media (max-width:850px){
+      .content{padding:2rem 1.5rem}
+      .app-name h1{font-size:2rem}
+      .page-title h2{font-size:1.25rem}
+      .main-menu{flex-direction:column;gap:.5rem}
+      .main-menu a{width:100%;text-align:center}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="content">
+      <header class="header">
+        <div class="app-name">
+          <h1>Planilhex</h1>
+          <p>Automatizando Planilhas</p>
+        </div>
+      </header>
+
+<!-- Navegação com o menu principal -->
+            <nav class="main-menu">
+                <a href="/home">Home</a>
+                <a href="/unir.html">Unir Planilhas</a>
+                <a href="/dividir.html">Particionar Planilhas</a>
+                <a href="/cruzar.html">Cruzar Dados</a>
+                <a href="/separar_por_coluna.html">Separar por Coluna</a>
+                <a href="/duplicados.html">Duplicados por Coluna</a>
+                <a href="/logout" class="logout-btn">Sair</a>
+            </nav>
+
+      <div class="page-title">
+        <h2>Separar por Coluna</h2>
+      </div>
+
+      <form id="formSeparar" class="form-section" method="POST" enctype="multipart/form-data">
+        <label class="upload-btn">
+          <span>+ Adicionar Planilha</span>
+          <input type="file" id="arquivo" name="arquivo" accept=".xlsx,.xlsm,.xls,.csv" style="display:none" required>
+        </label>
+
+        <div id="fileDisplay" class="file-item" style="display:none">
+          <span class="file-name"></span>
+          <a href="#" id="clearFile" class="clear-file-btn">Limpar</a>
+        </div>
+
+        <div class="form-group">
+          <label class="label-outside" for="coluna">Coluna</label>
+          <select id="coluna" name="coluna" required>
+            <option value="" disabled selected>Carregando colunas...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="label-outside" for="valorConsta">Valor que consta</label>
+          <select id="valorConsta" name="valor_consta" required>
+            <option value="" disabled selected>Selecione…</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="label-outside" for="valorNaoConsta">Valor que não consta</label>
+          <select id="valorNaoConsta" name="valor_nao_consta" required>
+            <option value="" disabled selected>Selecione…</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="label-outside" for="nomeConsta">Nome do arquivo que <strong>consta</strong></label>
+          <input type="text" id="nomeConsta" name="nome_consta" placeholder="Ex: clientes_confirmados.xlsx" required>
+        </div>
+
+        <div class="form-group">
+          <label class="label-outside" for="nomeNaoConsta">Nome do arquivo que <strong>não consta</strong></label>
+          <input type="text" id="nomeNaoConsta" name="nome_nao_consta" placeholder="Ex: clientes_pendentes.xlsx" required>
+        </div>
+
+        <button type="submit" id="btnSeparar">Separar</button>
+        <div id="mensagem" class="message-area"></div>
+      </form>
+
+      <div id="mensagem" class="message-area"></div>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(function () {
+  const $fileInput = $('#arquivo');
+  const $fileDisplay = $('#fileDisplay');
+  const $fileNameSpan = $fileDisplay.find('.file-name');
+  const $clearFileBtn = $('#clearFile');
+  const $coluna = $('#coluna');
+  const $valorConsta = $('#valorConsta');
+  const $valorNaoConsta = $('#valorNaoConsta');
+  const $mensagem = $('#mensagem');
+  const $btn = $('#btnSeparar');
+
+  let busy = false;
+
+  function showMsg(html){ $mensagem.html(html).addClass('show'); }
+  function resetMsg(){ $mensagem.removeClass('show').empty(); }
+
+  function popularSelect($select, itens, placeholder){
+    $select.empty();
+    $select.append(`<option value="" disabled selected>${placeholder}</option>`);
+    itens.forEach(v => $select.append(`<option value="${v}">${v}</option>`));
+  }
+
+  function setBusy(state, texto='Processando… aguarde'){
+    busy = state;
+    if(state){
+      $btn.prop('disabled', true).text(texto);
+    }else{
+      $btn.prop('disabled', false).text('Separar');
+    }
+  }
+
+  // arquivo -> carrega colunas
+  $fileInput.on('change', function(){
+    resetMsg();
+    const file = this.files[0];
+    if(!file){ $fileDisplay.hide(); return; }
+    $fileNameSpan.text(file.name);
+    $fileDisplay.show();
+
+    const fd = new FormData();
+    fd.append('arquivo', file);
+
+    setBusy(true, 'Lendo colunas…');
+    $.ajax({
+      url: '/process/get_colunas',
+      type: 'POST',
+      data: fd,
+      processData: false,
+      contentType: false,
+      success: function(r){
+        if(r.success){
+          popularSelect($coluna, r.colunas || [], 'Selecione uma coluna');
+          popularSelect($valorConsta, [], 'Selecione…');
+          popularSelect($valorNaoConsta, [], 'Selecione…');
+          showMsg('<div class="alert alert-success">Colunas carregadas.</div>');
+        }else{
+          showMsg(`<div class="alert alert-danger">${r.error || 'Erro ao obter colunas.'}</div>`);
+        }
+      },
+      error: function(){
+        showMsg('<div class="alert alert-danger">Erro ao carregar colunas.</div>');
+      },
+      complete: function(){
+        setBusy(false);
+      }
+    });
+  });
+
+  // limpar arquivo
+  $clearFileBtn.on('click', function(e){
+    e.preventDefault();
+    $fileInput.val('');
+    $fileDisplay.hide();
+    popularSelect($coluna, [], 'Carregando colunas...');
+    popularSelect($valorConsta, [], 'Selecione…');
+    popularSelect($valorNaoConsta, [], 'Selecione…');
+    resetMsg();
+  });
+
+  // coluna -> valores
+  $coluna.on('change', function(){
+    resetMsg();
+    const file = $fileInput[0].files[0];
+    const coluna = $coluna.val();
+    if(!file || !coluna){ return; }
+
+    const fd = new FormData();
+    fd.append('arquivo', file);
+    fd.append('coluna', coluna);
+
+    setBusy(true, 'Detectando valores…');
+    $.ajax({
+      url: '/process/get_valores',
+      type: 'POST',
+      data: fd,
+      processData: false,
+      contentType: false,
+      success: function(r){
+        if(r.success){
+          const valores = r.valores || [];
+          popularSelect($valorConsta, valores, 'Selecione…');
+          popularSelect($valorNaoConsta, valores, 'Selecione…');
+          showMsg('<div class="alert alert-success">Valores sugeridos carregados.</div>');
+        }else{
+          showMsg(`<div class="alert alert-danger">${r.error || 'Erro ao obter valores.'}</div>`);
+        }
+      },
+      error: function(){
+        showMsg('<div class="alert alert-danger">Erro ao carregar valores.</div>');
+      },
+      complete: function(){
+        setBusy(false);
+      }
+    });
+  });
+
+  // submit -> separa
+  $('#formSeparar').on('submit', function(e){
+    e.preventDefault();
+    if(busy) return; // evita duplo clique
+
+    resetMsg();
+    const fd = new FormData(this);
+
+    const coluna = fd.get('coluna');
+    const v1 = fd.get('valor_consta');
+    const v2 = fd.get('valor_nao_consta');
+    if(!coluna || !v1 || !v2){
+      showMsg('<div class="alert alert-danger">Preencha todos os campos.</div>');
+      return;
+    }
+    if(v1 === v2){
+      showMsg('<div class="alert alert-danger">Os dois valores não podem ser iguais.</div>');
+      return;
+    }
+
+    setBusy(true, 'Processando… isso pode levar alguns segundos');
+
+    fetch('/process/separar', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin'
+    })
+    .then(resp => {
+      const disp = resp.headers.get('Content-Disposition') || '';
+      if(!resp.ok){
+        return resp.json().then(d => { throw new Error(d.error || ('Erro ' + resp.status)); });
+      }
+      if(!/attachment/i.test(disp)){
+        throw new Error('Resposta não contém arquivo. Verifique login e campos.');
+      }
+      let filename = 'separado.zip';
+      const m = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disp);
+      if(m && m[1]) filename = m[1].replace(/['"]/g,'');
+      return resp.blob().then(blob => ({ blob, filename }));
+    })
+    .then(({ blob, filename }) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 1000);
+      showMsg('<div class="alert alert-success">ZIP gerado com sucesso.</div>');
+    })
+    .catch(err => {
+      showMsg(`<div class="alert alert-danger">Erro: ${err.message}</div>`);
+    })
+    .finally(() => {
+      setBusy(false);
+    });
+  });
+});
+</script>
+
+</body>
+</html>

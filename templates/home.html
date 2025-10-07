@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <!-- Meta tags para codificação e responsividade -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planilhex: Automatizando Planilhas - Home</title>
+    <meta name="description" content="Painel principal para automação de planilhas">
+    <!-- Inclusão da biblioteca Lucide para ícones (embora não usado aqui, mantido por consistência) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* --- Variáveis de Design (Paleta de Cores) --- */
+        :root {
+            --neon-green: #00ff00; /* Cor neon verde para destaques */
+            --text-color: #f5f5f5; /* Cor padrão do texto */
+            --bg-translucent: rgba(255, 255, 255, 0.03); /* Fundo translúcido */
+            --border-translucent: rgba(255, 255, 255, 0.1); /* Borda translúcida */
+            --neon-shadow: 0 0 15px rgba(0, 255, 0, 0.4); /* Sombra neon verde */
+            --error-bg: rgba(255, 50, 50, 0.15); /* Fundo de erro */
+            --error-border: rgba(255, 50, 50, 0.3); /* Borda de erro */
+            /* Adicionada variável para o vermelho para consistência */
+            --neon-red: #ff3333;
+        }
+
+        /* --- Estilo Base --- */
+        * {
+            margin: 0; /* Remove margens padrão */
+            padding: 0; /* Remove paddings padrão */
+            box-sizing: border-box; /* Inclui padding e borda no cálculo do tamanho */
+        }
+
+        body {
+            min-height: 100vh; /* Altura mínima da tela */
+            background: #000000; /* Fundo preto puro */
+            display: flex; /* Layout flexível */
+            align-items: center; /* Centraliza verticalmente */
+            justify-content: center; /* Centraliza horizontalmente */
+            padding: 1.5rem; /* Espaçamento interno */
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; /* Fonte padrão */
+            color: var(--text-color); /* Cor do texto */
+        }
+
+        /* --- Container Principal --- */
+        .container {
+            background: var(--bg-translucent); /* Fundo translúcido */
+            border-radius: 1.5rem; /* Bordas arredondadas */
+            box-shadow: 
+                0 0 25px rgba(255, 255, 255, 0.1), /* Sombra externa suave */
+                0 0 50px rgba(0, 255, 0, 0.05), /* Brilho neon verde externo */
+                inset 0 1px 0 rgba(255, 255, 255, 0.1); /* Efeito interno */
+            width: 100%; /* Largura total */
+            max-width: 60rem; /* <-- CORRIGIDO: Aumentado de 50rem para 60rem para caber o menu */
+            border: 1px solid var(--border-translucent); /* Borda sutil */
+            backdrop-filter: blur(20px); /* Efeito de vidro */
+            position: relative; /* Posicionamento relativo para pseudo-elementos */
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); /* Animação suave ao hover */
+            overflow: hidden; /* Oculta overflow */
+        }
+
+        .container::before {
+            content: ''; /* Cria pseudo-elemento */
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px; /* Linha fina */
+            background: linear-gradient(90deg, transparent, var(--neon-green), transparent); /* Gradiente neon */
+            opacity: 0.6; /* Transparência */
+        }
+
+        .container:hover {
+            box-shadow: 
+                0 0 35px rgba(255, 255, 255, 0.15), /* Sombra externa mais forte */
+                0 0 70px rgba(0, 255, 0, 0.1), /* Brilho neon mais visível */
+                inset 0 1px 0 rgba(255, 255, 255, 0.2); /* Efeito interno mais forte */
+            border-color: rgba(0, 255, 0, 0.3); /* Borda verde ao hover */
+            transform: translateY(-2px); /* Elevação ao hover */
+        }
+
+        .content {
+            padding: 2.5rem; /* Espaçamento interno */
+        }
+
+        /* --- Cabeçalho com Nome do App --- */
+        .header {
+            text-align: center; /* Centraliza texto */
+            margin-bottom: 2rem; /* Aumentado o espaçamento */
+        }
+
+        .app-name h1 {
+            font-size: 2.5rem; /* Tamanho da fonte */
+            font-weight: 700; /* Peso da fonte */
+            color: var(--text-color); /* Cor base */
+            text-shadow: 
+                0 0 20px rgba(0, 255, 0, 0.3), /* Sombra externa neon */
+                0 2px 4px rgba(0, 0, 0, 0.8); /* Sombra interna */
+            letter-spacing: 2px; /* Espaçamento entre letras */
+            text-transform: uppercase; /* Texto em maiúsculo */
+            margin-bottom: 0.5rem; /* Espaçamento inferior */
+            background: linear-gradient(135deg, #ffffff, var(--neon-green)); /* Gradiente para o texto */
+            -webkit-background-clip: text; /* Clipa o gradiente ao texto (Webkit) */
+            -webkit-text-fill-color: transparent; /* Torna o texto transparente para o gradiente */
+            background-clip: text; /* Clipa o gradiente ao texto (padrão) */
+        }
+
+        .app-name p {
+            font-size: 0.95rem; /* Tamanho da fonte */
+            color: rgba(245, 245, 245, 0.8); /* Cor do subtítulo */
+            font-weight: 300; /* Peso leve */
+            letter-spacing: 1px; /* Espaçamento entre letras */
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); /* Sombra sutil */
+        }
+        .container { width: 100%; max-width: 72rem; }   /* + espaço */
+        .main-menu { display:flex; justify-content:center; gap:1rem; flex-wrap:wrap; } /* permitir quebra */
+        .main-menu a { flex: 0 1 14rem; min-width: 12rem; padding: 1rem 1.25rem; font-size:1rem; } /* cards fluidos */
+        @media (max-width: 768px){
+        .main-menu { flex-direction:column; }
+        .main-menu a { width:100%; }
+        }
+
+
+       
+        .main-menu a {
+            background: var(--bg-translucent);
+            border: 1px solid var(--border-translucent);
+            border-radius: 0.75rem;
+            padding: 1rem; /* Padding ajustado para melhor encaixe */
+            color: var(--text-color);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem; /* Fonte um pouco menor para ajudar */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+            flex: 1; /* Permite que os botões cresçam igualmente */
+            text-align: center; /* Garante centralização do texto */
+            min-width: 9rem; /* Mínimo para legibilidade */
+        }
+
+        .main-menu a::before {
+            content: ''; /* Cria pseudo-elemento */
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 0, 0.2), transparent); /* Gradiente de animação */
+            transition: left 0.5s ease; /* Animação do gradiente */
+        }
+
+        .main-menu a:hover::before {
+            left: 100%; /* Move o gradiente ao hover */
+        }
+
+        .main-menu a:hover {
+            background: linear-gradient(135deg, rgba(0, 255, 0, 0.15), rgba(0, 255, 0, 0.25)); /* Fundo com gradiente */
+            border-color: var(--neon-green); /* Borda verde */
+            box-shadow: var(--neon-shadow), 0 5px 15px rgba(0, 255, 0, 0.2); /* Sombra neon */
+            transform: translateY(-2px); /* Elevação */
+        }
+
+        .main-menu a.logout-btn:hover {
+            background: linear-gradient(135deg, rgba(255, 51, 51, 0.15), rgba(255, 51, 51, 0.25)); /* Fundo vermelho */
+            border-color: var(--neon-red); /* Borda vermelha */
+            box-shadow: 0 0 15px rgba(255, 51, 51, 0.4), 0 5px 15px rgba(255, 51, 51, 0.2); /* Sombra vermelha */
+        }
+
+        /* --- Rodapé --- */
+        .footer-text {
+            text-align: center; /* Centraliza texto */
+            margin-top: 2.5rem; /* Aumentado o espaçamento */
+        }
+
+        .footer-text p {
+            font-size: 0.8rem; /* Tamanho da fonte */
+            color: rgba(245, 245, 245, 0.5); /* Cor do texto */
+            font-weight: 300; /* Peso leve */
+            letter-spacing: 0.5px; /* Espaçamento entre letras */
+        }
+
+        /* --- Media Queries (Responsividade) --- */
+        @media (min-width: 1024px) {
+            .container {
+                max-width: 70rem; /* <-- CORRIGIDO: Aumentado para comportar botões maiores */
+            }
+            .content {
+                padding: 3rem; /* Aumenta o padding */
+            }
+            .app-name h1 {
+                font-size: 3rem; /* Aumenta o tamanho da logo */
+            }
+            .main-menu a {
+                padding: 1rem 2rem; /* Volta o padding maior */
+                font-size: 1rem; /* Volta o tamanho da fonte */
+                min-width: 12rem; /* Aumenta o mínimo em telas grandes */
+                flex: 0 0 auto; /* Volta ao comportamento original em telas grandes */
+            }
+        }
+
+        @media (max-width: 768px) { /* Ajuste para tablets e telas menores */
+            .main-menu {
+                flex-direction: column; /* Empilha os botões */
+                gap: 0.75rem; /* Reduz o espaçamento */
+            }
+            .main-menu a {
+                width: 100%; /* Largura total */
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Container principal da página -->
+    <div class="container">
+        <div class="content">
+            <!-- Cabeçalho com o nome do app -->
+            <header class="header">
+                <div class="app-name">
+                    <h1>Planilhex</h1>
+                    <p>Automatizando Planilhas</p>
+                </div>
+            </header>
+
+<!-- Navegação com o menu principal -->
+            <nav class="main-menu">
+                <a href="/home">Home</a>
+                <a href="/unir.html">Unir Planilhas</a>
+                <a href="/dividir.html">Particionar Planilhas</a>
+                <a href="/cruzar.html">Cruzar Dados</a>
+                <a href="/separar_por_coluna.html">Separar por Coluna</a>
+                <a href="/duplicados.html">Duplicados por Coluna</a>
+                <a href="/logout" class="logout-btn">Sair</a>
+            </nav>
+            
+            <!-- Rodapé da página -->
+            <footer class="footer-text">
+                <p>Sistema profissional de automação de planilhas © 2025</p>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Script para inicializar os ícones Lucide (mantido por consistência) -->
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

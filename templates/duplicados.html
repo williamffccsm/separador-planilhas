@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Planilhex: Automatizando Planilhas - Duplicados</title>
+  <meta name="description" content="Gerar planilha contendo apenas linhas com duplicados de uma coluna"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+    :root{--neon-green:#00ff00;--text-color:#f5f5f5;--bg-translucent:rgba(255,255,255,.03);--border-translucent:rgba(255,255,255,.1);--neon-shadow:0 0 15px rgba(0,255,0,.4);--error-bg:rgba(255,50,50,.15);--error-border:rgba(255,50,50,.3);--neon-red:#ff3333}
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:1.5rem;font-family:'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text-color)}
+    .container{background:var(--bg-translucent);border-radius:1.5rem;box-shadow:0 0 25px rgba(255,255,255,.1),0 0 50px rgba(0,255,0,.05),inset 0 1px 0 rgba(255,255,255,.1);width:fit-content;max-width:95vw;border:1px solid var(--border-translucent);backdrop-filter:blur(20px);position:relative;transition:all .4s cubic-bezier(.4,0,.2,1);overflow:hidden}
+    .container::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--neon-green),transparent);opacity:.6}
+    .container:hover{box-shadow:0 0 35px rgba(255,255,255,.15),0 0 70px rgba(0,255,0,.1),inset 0 1px 0 rgba(255,255,255,.2);border-color:rgba(0,255,0,.3);transform:translateY(-2px)}
+    .content{padding:2.5rem}
+    .header{text-align:center;margin-bottom:1rem}
+    .app-name h1{font-size:2.5rem;font-weight:700;color:var(--text-color);text-shadow:0 0 20px rgba(0,255,0,.3),0 2px 4px rgba(0,0,0,.8);letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem;background:linear-gradient(135deg,#fff,var(--neon-green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .app-name p{font-size:.95rem;color:rgba(245,245,245,.8);font-weight:300;letter-spacing:1px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .page-title{text-align:center;margin-bottom:1.5rem}
+    .page-title h2{font-size:1.75rem;font-weight:600;background:linear-gradient(135deg,#ffffff,var(--neon-green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 15px rgba(0,255,0,.3),0 2px 4px rgba(0,0,0,.8);letter-spacing:1.5px;text-transform:uppercase}
+    .main-menu{display:flex;justify-content:center;gap:1rem;flex-wrap:nowrap;width:100%;margin-bottom:1rem}
+    .main-menu a{background:var(--bg-translucent);border:1px solid var(--border-translucent);border-radius:.75rem;padding:1rem 1.5rem;color:var(--text-color);text-decoration:none;font-weight:600;font-size:1rem;transition:all .3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;gap:.75rem;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:1px;text-transform:uppercase;position:relative;overflow:hidden;white-space:nowrap}
+    .main-menu a::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,0,.2),transparent);transition:left .5s ease}
+    .main-menu a:hover::before{left:100%}
+    .main-menu a:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);transform:translateY(-2px)}
+    .main-menu a.logout-btn:hover{background:linear-gradient(135deg,rgba(255,51,51,.15),rgba(255,51,51,.25));border-color:var(--neon-red);box-shadow:0 0 15px rgba(255,51,51,.4),0 5px 15px rgba(255,51,51,.2)}
+    .upload-section{margin-top:2rem;display:flex;flex-direction:column;gap:1.5rem}
+    .upload-btn{background:var(--bg-translucent);border:1px dashed var(--border-translucent);border-radius:.75rem;padding:1.5rem;text-align:center;cursor:pointer;transition:all .3s ease}
+    .upload-btn:hover{background:rgba(0,255,0,.1);border-color:var(--neon-green);box-shadow:var(--neon-shadow)}
+    .format-select,.base-select,.base-name{width:100%;padding:1rem;border:1px solid var(--border-translucent);border-radius:.75rem;background:rgba(0,0,0,.6);color:var(--text-color);font-size:.95rem;transition:all .3s cubic-bezier(.4,0,.2,1)}
+    .format-select:focus,.base-select:focus,.base-name:focus{border-color:var(--neon-green);background:rgba(0,0,0,.8);box-shadow:var(--neon-shadow),inset 0 1px 3px rgba(0,0,0,.3);outline:none}
+    .file-item{background:rgba(0,0,0,.4);border:1px solid var(--border-translucent);padding:.75rem 1rem;border-radius:.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;font-size:.9rem;transition:background .3s;margin-top:-.5rem}
+    .file-item:hover{background:rgba(0,255,0,.05);border-color:rgba(0,255,0,.2)}
+    .file-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,.8);flex-grow:1}
+    .clear-file-btn{color:var(--neon-red);font-size:.8rem;cursor:pointer;text-decoration:none;opacity:.7;transition:opacity .3s;white-space:nowrap}
+    .clear-file-btn:hover{opacity:1;text-decoration:underline}
+    .upload-section p{font-weight:600;color:var(--neon-green);text-shadow:0 0 8px rgba(0,255,0,.5);margin-top:.5rem;margin-bottom:-.75rem;text-align:left;padding-left:.5rem}
+    .action-btn{background:linear-gradient(135deg,var(--bg-translucent),rgba(0,255,0,.1));color:var(--text-color);padding:1rem 2rem;border-radius:.75rem;font-weight:600;font-size:1rem;border:1px solid var(--border-translucent);width:100%;cursor:pointer;transition:all .3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;gap:.75rem;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:1px;text-transform:uppercase;position:relative;overflow:hidden;margin-top:1rem}
+    .action-btn::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,0,.2),transparent);transition:left .5s ease}
+    .action-btn:hover::before{left:100%}
+    .action-btn:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);transform:translateY(-2px)}
+    .action-btn:disabled{opacity:.7;cursor:not-allowed;transform:none}
+    .progress-area,.success-message,.download-area,.footer{margin-top:1.5rem;padding:1rem;border-radius:.75rem;background:var(--bg-translucent);border:1px solid var(--border-translucent);text-align:center;display:none}
+    .progress-area.show,.success-message.show,.download-area.show{display:block}
+    .success-message{background:rgba(0,255,0,.1);border-color:var(--neon-green);animation:fadeIn .5s ease-in}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    .fireworks{position:relative;width:100%;height:100px;overflow:hidden}
+    .firework{position:absolute;width:5px;height:5px;background:var(--neon-green);border-radius:50%;animation:explode 1s ease-out forwards;box-shadow:0 0 10px var(--neon-green),0 0 20px var(--neon-green)}
+    @keyframes explode{0%{transform:scale(0);opacity:1}100%{transform:scale(10);opacity:0}}
+    .footer{padding:1rem;background:transparent;border:none;display:block;font-size:.8rem;color:rgba(245,245,245,.5);animation:fadeOut 5s forwards}
+    @keyframes fadeOut{0%{opacity:1}100%{opacity:0}}
+    @media (max-width:850px){.content{padding:2rem 1.5rem}.app-name h1{font-size:2rem}.page-title h2{font-size:1.25rem}.main-menu{flex-direction:column;gap:.5rem}.main-menu a{width:100%}}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="content">
+      <header class="header">
+        <div class="app-name"><h1>Planilhex</h1><p>Automatizando Planilhas</p></div>
+      </header>
+
+      <nav class="main-menu">
+        <a href="/home">Home</a>
+        <a href="/unir.html">Unir Planilhas</a>
+        <a href="/dividir.html">Particionar Planilhas</a>
+        <a href="/cruzar.html">Cruzar Dados</a>
+        <a href="/separar_por_coluna.html">Separar por Coluna</a>
+        <a href="/duplicados.html">Duplicados por Coluna</a>
+        <a href="/logout" class="logout-btn">Sair</a>
+      </nav>
+
+      <div class="page-title"><h2>Duplicados por Coluna</h2></div>
+
+      <div class="upload-section">
+        <label class="upload-btn">
+          <span>+ Adicionar Planilha</span>
+          <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls,.txt,.csv" style="display:none">
+        </label>
+        <div id="fileDisplay" class="file-item" style="display:none">
+          <span class="file-name"></span>
+          <a href="#" id="clearFile" class="clear-file-btn">Limpar</a>
+        </div>
+
+        <p>Selecione a Coluna que será verificada</p>
+        <select id="colunaSelect" class="base-select">
+          <option value="">Selecione a Coluna</option>
+        </select>
+
+        <p>Nome do Arquivo de Saída (Opcional)</p>
+        <input type="text" id="nomeSaida" class="base-name" placeholder="duplicados.xlsx"/>
+
+        <button id="btnGerar" class="action-btn" disabled>Gerar Planilha de Duplicados</button>
+
+        <div id="progressArea" class="progress-area"><p id="progressText">Aguarde, processando...</p></div>
+        <div id="successMessage" class="success-message"><p>Arquivo gerado com sucesso!</p><div id="fireworks" class="fireworks"></div></div>
+        <div id="downloadArea" class="download-area"><p>Clique para baixar:</p><a id="downloadLink" href="#" download="duplicados.xlsx">Download</a></div>
+
+        <button id="btnStats" class="action-btn">Ver estatísticas de duplicados</button>
+        <div id="statsBox" class="progress-area"></div>
+      </div>
+
+      <footer class="footer"><p>Continue organizando seus dados com Planilhex.</p></footer>
+    </div>
+  </div>
+
+  <!-- Worker: lê só as 4 primeiras linhas para descobrir cabeçalho -->
+  <script type="text/worker" id="headerWorkerScript">
+    self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+
+    function guessHeaders(rows){
+      // tenta achar a primeira linha "com cara de cabeçalho"
+      for (let i=0;i<Math.min(rows.length,4);i++){
+        const r = rows[i] || [];
+        const clean = r.map(x => (x==null?"":String(x).trim()));
+        const nonempty = clean.filter(Boolean);
+        const allDigits = nonempty.length>0 && nonempty.every(x => /^[0-9]+$/.test(x));
+        if (nonempty.length>=2 && !allDigits){
+          const width = Math.max(...rows.slice(0,4).map(a=>a.length), r.length, 1);
+          return Array.from({length:width},(_,j)=> clean[j] || `col_${j}`);
+        }
+      }
+      // fallback: linha 1
+      const f = rows[0] || [];
+      return f.length ? f.map((v,j)=> (v && String(v).trim()) || `col_${j}`) : ["col_0"];
+    }
+
+    self.onmessage = (ev)=>{
+      try{
+        const wb = XLSX.read(ev.data.fileData,{type:'array',sheetRows:4});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+        const headers = guessHeaders(rows);
+        self.postMessage({success:true, headers});
+      }catch(e){
+        self.postMessage({success:false, error:e.message});
+      }
+    };
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const fileInput = document.getElementById('fileInput');
+      const fileDisplay = document.getElementById('fileDisplay');
+      const fileNameSpan = fileDisplay.querySelector('.file-name');
+      const clearFileBtn = document.getElementById('clearFile');
+      const colunaSelect = document.getElementById('colunaSelect');
+      const nomeSaida = document.getElementById('nomeSaida');
+      const btnGerar = document.getElementById('btnGerar');
+      const progressArea = document.getElementById('progressArea');
+      const progressText = document.getElementById('progressText');
+      const successMessage = document.getElementById('successMessage');
+      const fireworks = document.getElementById('fireworks');
+      const downloadArea = document.getElementById('downloadArea');
+      const downloadLink = document.getElementById('downloadLink');
+      const btnStats = document.getElementById('btnStats');
+      const statsBox = document.getElementById('statsBox');
+
+      let headerWorker;
+      try{
+        const blob = new Blob([ document.getElementById('headerWorkerScript').textContent ], {type:'application/javascript'});
+        headerWorker = new Worker(URL.createObjectURL(blob));
+        headerWorker.onmessage = (e)=>{
+          if(e.data.success){
+            colunaSelect.innerHTML = '<option value="">Selecione a Coluna</option>';
+            e.data.headers.forEach(h=>{
+              const o=document.createElement('option'); o.value=h; o.textContent=h||'(Coluna)'; colunaSelect.appendChild(o);
+            });
+          }else{
+            alert('Erro ao ler cabeçalho: '+e.data.error);
+            resetFile();
+          }
+          checkInputs();
+        };
+      }catch{}
+
+      function checkInputs(){ btnGerar.disabled = !(fileInput.files.length && colunaSelect.value); }
+      function createFireworks(){ fireworks.innerHTML=''; for(let i=0;i<20;i++){ const f=document.createElement('div'); f.className='firework'; f.style.left=(Math.random()*100)+'%'; f.style.top=(Math.random()*50)+'%'; fireworks.appendChild(f); setTimeout(()=>f.remove(),1000);} }
+      function resetFile(){
+        fileInput.value=''; fileDisplay.style.display='none';
+        colunaSelect.innerHTML = '<option value="">Selecione a Coluna</option>';
+        successMessage.classList.remove('show'); downloadArea.classList.remove('show');
+      }
+
+      fileInput.addEventListener('change', () => {
+        successMessage.classList.remove('show'); downloadArea.classList.remove('show');
+        if(!fileInput.files.length){ resetFile(); checkInputs(); return; }
+        fileNameSpan.textContent = fileInput.files[0].name; fileDisplay.style.display='flex';
+
+        // Lê apenas 4 linhas no worker
+        const reader = new FileReader();
+        reader.onload = (e)=> headerWorker && headerWorker.postMessage({fileData: new Uint8Array(e.target.result)});
+        reader.readAsArrayBuffer(fileInput.files[0]);
+      });
+
+      clearFileBtn.addEventListener('click', (e)=>{ e.preventDefault(); resetFile(); checkInputs(); });
+      colunaSelect.addEventListener('change', checkInputs);
+
+      btnGerar.addEventListener('click', async ()=>{
+        if(!fileInput.files.length || !colunaSelect.value) return;
+        btnGerar.disabled = true;
+        progressArea.classList.add('show'); progressText.textContent = 'Aguarde, processando...';
+        successMessage.classList.remove('show'); downloadArea.classList.remove('show');
+
+        const fd = new FormData();
+        fd.append('arquivo', fileInput.files[0]);
+        fd.append('coluna', colunaSelect.value);
+        if (nomeSaida.value.trim()) fd.append('nome_saida', nomeSaida.value.trim());
+
+        try{
+          const r = await fetch('/process/duplicados', { method:'POST', body: fd });
+          if(!r.ok){ let j; try{ j = await r.json(); }catch{}; throw new Error(j?.error || ('Erro '+r.status)); }
+          const disp = r.headers.get('Content-Disposition') || '';
+          const m = disp.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+          const fname = decodeURIComponent(m?.[1] || m?.[2] || (nomeSaida.value.trim() || 'duplicados.xlsx'));
+          const blob = await r.blob(); const url = URL.createObjectURL(blob);
+          downloadLink.href = url; downloadLink.download = fname;
+          progressArea.classList.remove('show'); successMessage.classList.add('show'); createFireworks(); downloadArea.classList.add('show');
+        }catch(e){
+          progressArea.classList.add('show'); progressText.textContent = 'Erro: ' + e.message + '. Tente novamente.';
+        }finally{ btnGerar.disabled = false; }
+      });
+
+      btnStats.addEventListener('click', async ()=>{
+        if(!fileInput.files.length || !colunaSelect.value){ alert('Selecione arquivo e coluna.'); return; }
+        statsBox.classList.add('show'); statsBox.innerHTML = '<p>Calculando estatísticas...</p>';
+        const fd = new FormData(); fd.append('arquivo', fileInput.files[0]); fd.append('coluna', colunaSelect.value);
+        try{
+          const r = await fetch('/process/duplicados_stats', { method:'POST', body: fd });
+          const j = await r.json();
+          if(!j.success) throw new Error(j.error || 'Erro ao obter estatísticas');
+          statsBox.innerHTML = `
+            <div style="text-align:left">
+              <p><b>Total linhas:</b> ${j.total_linhas}</p>
+              <p><b>Vazios (literal/dígitos):</b> ${j.vazios_literal} / ${j.vazios_digitos}</p>
+              <p><b>Somente 11 dígitos:</b> ${j.qtd_len11}</p>
+              <p><b>Dup literal (todos / sem vazio):</b> ${j.dup_literal_todos} / ${j.dup_literal_sem_vazio}</p>
+              <p><b>Dup dígitos (todos / sem vazio / 11 dígitos):</b> ${j.dup_digitos_todos} / ${j.dup_digitos_sem_vazio} / ${j.dup_digitos_len11}</p>
+            </div>`;
+        }catch(e){ statsBox.innerHTML = `<p style="color:#ff8a8a">Erro: ${e.message}</p>`; }
+      });
+
+      try{ lucide.createIcons(); }catch{}
+    });
+  </script>
+</body>
+</html>
