@@ -2,5 +2,9 @@
   "files.watcherExclude": {
     "**/dist/**": true,
     "**/build/**": true
-  }
+  },
+  "python.analysis.extraPaths": [
+    "./dist/Planilhex/_internal/pandas/tests/arrays/interval/test_interval_",
+    "./dist/Planilhex/_internal/pandas/tests/arrays/interval/test_interval_"
+  ]
 }

@@ -22,6 +22,8 @@ from werkzeug.utils import secure_filename # Para garantir que nomes de arquivos
 import warnings
 import sys, ctypes, pathlib
 import csv # Adicionado para usar csv.Sniffer
+
+
 def _windows_downloads_known_folder():
     # FOLDERID_Downloads = {374DE290-123F-4565-9164-39C4925E467B}
     from uuid import UUID
@@ -52,11 +54,12 @@ BASE_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
 os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
 
 
+
 # ---------------- Sessão Flask ----------------
 from flask_session import Session
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'a-chave-secreta-do-planilhex-2025'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', os.urandom(32))
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["SESSION_PERMANENT"] = False
 Session(app)
@@ -93,23 +96,24 @@ print = lambda *a, **k: (__import__('builtins').print(*a, flush=True, **k))
 # 2. FUNÇÕES AUXILIARES
 # ==============================================================================
 def _fix_headers(df):
-    # acha a primeira linha com pelo menos 2 células não vazias e NÃO só números
+    # tenta achar linha de header nas 10 primeiras linhas
     for i in range(min(10, len(df))):
         row = df.iloc[i]
         nonempty = row.dropna().astype(str).str.strip()
-        if (nonempty.size >= 2) and not all(nonempty.str.fullmatch(r"\d+")):
+        # aceita header com >=1 célula não vazia e não totalmente numérica
+        if (nonempty.size >= 1) and not all(nonempty.str.fullmatch(r"\d+")):
             new_cols = nonempty.reindex_like(row).fillna("").tolist()
             new_cols = [c.strip() if c else f"col_{j}" for j, c in enumerate(new_cols)]
             df = df.iloc[i+1:].reset_index(drop=True)
             df.columns = new_cols
             break
 
-    # limpa espaços e nomes vazios
     cols = pd.Series(list(df.columns), dtype="object").astype(str)
     cols = cols.str.strip().str.replace(r"\s+", " ", regex=True)
     cols = cols.where(cols != "", other=pd.Series([f"col_{i}" for i in range(len(cols))]))
     df.columns = list(cols)
     return df
+
 
 
 
@@ -243,42 +247,134 @@ def _ensure_xlsx(name: str, default="resultado.xlsx"):
     return name
 
 
-# -------------------- Leitura completa (lenta, mas robusta) --------------------
+
+
+
+
+
+
+
+
+
+
+import re
+from io import BytesIO, StringIO
+
+# --- SUBSTITUA sua ler_planilha inteira por esta versão ---
+import re
+from io import BytesIO, StringIO
+
 def ler_planilha(arquivo_recebido):
-    try:
-        extensao = Path(arquivo_recebido.filename).suffix.lower()
-        arquivo_recebido.seek(0)
+    """
+    Leitura robusta e previsível (.csv/.tsv/.txt/.xlsx/.xlsm/.xls).
+    Estratégia:
+      - Sempre lê SEM header e promove depois com _fix_headers.
+      - CSV: usa Sniffer; fallback heurístico; não “normaliza” linhas.
+      - Nunca retorna (0,0) por erro silencioso: se não houver dados, lança erro.
+    """
+    import pandas as pd, chardet, csv as _csv
+    from pathlib import Path
 
-        if extensao in {'.xlsx', '.xlsm', '.xls'}:
-            df_raw = pd.read_excel(arquivo_recebido, header=None, dtype=str)
-            df = _fix_headers(df_raw)
-
-        elif extensao == '.csv':
-            import chardet, csv as _csv
-            raw = arquivo_recebido.read()
-            arquivo_recebido.seek(0)
-            enc = chardet.detect(raw).get('encoding') or 'utf-8'
-            txt = raw.decode(enc, errors='replace')
-            sample = txt[:20000]
-            try:
-                dialect = csv.Sniffer().sniff(sample, delimiters=';,\t|,')
-                sep = dialect.delimiter
-            except Exception:
-                sep = ';' if sample.count(';') >= sample.count(',') else ','
-            from io import StringIO
-            df_raw = pd.read_csv(StringIO(txt), sep=sep, engine='python',
-                                 header=None, dtype=str, on_bad_lines='skip',
-                                 quoting=_csv.QUOTE_MINIMAL)
-            df = _fix_headers(df_raw)
-        else:
-            raise ValueError(f"Formato '{extensao}' não suportado. Use .csv, .xlsx, .xlsm ou .xls.")
-
-        df = df.dropna(axis=1, how='all').fillna("")
+    def _fix_headers(df: pd.DataFrame) -> pd.DataFrame:
+        # promove a primeira linha “não totalmente numérica” entre as 10 primeiras
+        promoted = False
+        for i in range(min(10, len(df))):
+            row = df.iloc[i].astype(str).str.strip()
+            if (row != "").any() and not all(row.str.fullmatch(r"\d+")):
+                cols = [c if c else f"col_{j}" for j, c in enumerate(row)]
+                df = df.iloc[i+1:].reset_index(drop=True)
+                df.columns = [str(c).strip() for c in cols]
+                promoted = True
+                break
+        if not promoted:
+            df.columns = [f"col_{i}" for i in range(df.shape[1])]
+        # normalização final
+        cols = pd.Series(df.columns, dtype="object").astype(str).str.strip().str.replace(r"\s+", " ", regex=True)
+        cols = [c if c else f"col_{i}" for i, c in enumerate(cols)]
+        df.columns = cols
         return df
 
-    except Exception as e:
-        app.logger.error(f"Erro ao ler o arquivo {arquivo_recebido.filename}: {e}")
-        raise ValueError(f"Não foi possível ler o arquivo '{arquivo_recebido.filename}'.")
+    fname = arquivo_recebido.filename or ""
+    ext = Path(fname).suffix.lower()
+
+    # lê bytes
+    arquivo_recebido.seek(0)
+    raw = arquivo_recebido.read()
+    arquivo_recebido.seek(0)
+
+    if ext in {'.xlsx', '.xlsm', '.xls'}:
+        df_raw = pd.read_excel(BytesIO(raw), header=None, dtype=str)
+        if df_raw.empty or df_raw.shape[1] == 0:
+            raise ValueError("Arquivo Excel sem dados.")
+        df = _fix_headers(df_raw)
+
+    elif ext in {'.csv', '.tsv', '.txt'}:
+        enc = (chardet.detect(raw).get('encoding') or 'utf-8')
+        txt = raw.decode(enc, errors='replace')
+        sample = txt[:20000]
+
+        # detecta separador
+        try:
+            dialect = _csv.Sniffer().sniff(sample, delimiters=';,\t|')
+            sep = dialect.delimiter
+        except Exception:
+            # heurística com desconto para vírgula decimal
+            import re as _re
+            counts = {d: sample.count(d) for d in [';', ',', '\t', '|']}
+            counts[','] -= len(_re.findall(r'\d,\d{1,3}(?:\D|$)', sample))
+            sep = max(counts, key=counts.get) or ';'
+
+        def _read_csv(t, s):
+            return pd.read_csv(
+                StringIO(t),
+                sep=s,
+                header=None,
+                dtype=str,
+                engine='python',
+                on_bad_lines='skip',
+                keep_default_na=False,
+                quoting=_csv.QUOTE_MINIMAL
+            )
+
+        df_raw = _read_csv(txt, sep)
+        # fallback: tentar outros se veio 1 coluna
+        if df_raw.shape[1] == 1:
+            for cand in [';', '\t', '|', ',']:
+                if cand == sep: 
+                    continue
+                if cand in sample:
+                    try:
+                        df_try = _read_csv(txt, cand)
+                        if df_try.shape[1] > 1:
+                            df_raw = df_try; sep = cand; break
+                    except Exception:
+                        pass
+
+        if df_raw.empty or df_raw.shape[1] == 0:
+            raise ValueError("CSV/TXT sem dados legíveis.")
+
+        df = _fix_headers(df_raw)
+
+    else:
+        raise ValueError(f"Formato '{ext}' não suportado. Use .csv, .tsv, .txt, .xlsx, .xlsm ou .xls.")
+
+    # limpeza final segura
+    if len(df) > 0:
+        df = df.dropna(axis=1, how='all')
+    df = df.fillna("")
+
+    # renomeia única coluna genérica
+    if df.shape[1] == 1 and re.fullmatch(r"col_\d+", str(df.columns[0])):
+        df.columns = ['VALOR']
+
+    if df.shape == (0, 0):
+        raise ValueError("Nenhuma célula válida após leitura.")
+
+    return df
+
+
+
+
 
 # -------------------- Leitura de amostra (rápida para UI) --------------------
 
@@ -562,69 +658,125 @@ def process_duplicados():
                          mimetype="application/octet-stream", etag=False, conditional=False, max_age=0)
     except Exception as e:
         app.logger.error(f"[process_duplicados] erro: {e}")
-        return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 5
+        return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
+
+
+
+
+
+
+
+
+
+
+def _detect_sep(text: str) -> str:
+    import collections
+    cands = [';', ',', '\t', '|']
+    lines = [ln for ln in text.splitlines()[:500] if ln.strip()]
+    if not lines:
+        return ';'
+    scores = collections.Counter()
+    for ln in lines:
+        for d in cands:
+            scores[d] += ln.count(d)
+    # preferir ';' em empate com ',' para evitar conflito com decimal
+    best = max(cands, key=lambda d: (scores[d], d == ';'))
+    return best or ';'
+
+def _read_csv_no_header(text: str) -> pd.DataFrame:
+    from io import StringIO
+    sep = _detect_sep(text)
+    df = pd.read_csv(
+        StringIO(text),
+        sep=sep,
+        engine='python',
+        header=None,
+        dtype=str,
+        on_bad_lines='skip'
+    )
+    # se ainda veio 1 coluna mas contém delimitadores, dividir manualmente
+    if df.shape[1] == 1:
+        col = df.iloc[:, 0].astype(str)
+        if any(x in col.str[:20000].to_string() for x in [';', ',', '\t', '|']):
+            parts = col.str.split(sep, expand=True)
+            df = parts.astype(str)
+    # nomes padrão
+    df.columns = [f"col_{i}" for i in range(df.shape[1])]
+    return df.fillna("")
 
 # --- ROTAS DE PROCESSAMENTO (AÇÕES DOS FORMULÁRIOS) ---
+# --- ROTAS DE PROCESSAMENTO (AÇÕES DOS FORMULÁRIOS) ---
+# --- MANTENHA só esta versão da rota /process/unir ---
+from pathlib import Path
+
 @app.route('/process/unir', methods=['POST'])
 @require_login
 def process_unir():
     try:
         files = [f for f in request.files.getlist('files[]') if f and f.filename]
         if not files:
-            return jsonify({"success": False, "error": "Por favor, selecione os arquivos para unir."}), 400
+            return jsonify({"success": False, "error": "Selecione os arquivos para unir."}), 400
 
+        modo = (request.form.get('modo_uniao') or 'linhas').strip().lower()  # 'linhas' | 'colunas'
         app.logger.info("UNIR - Recebidos %d arquivos: %s", len(files), [f.filename for f in files])
 
         dfs = []
         for f in files:
-            try:
-                df_i = ler_planilha(f)
-            except Exception as e:
-                app.logger.error("UNIR - Falha lendo %s: %s", f.filename, e)
-                return jsonify({"success": False, "error": f"Erro ao ler '{f.filename}': {e}"}), 400
-            app.logger.info("UNIR - %s: %d linhas, %d colunas", f.filename, len(df_i), df_i.shape[1])
+            df_i = ler_planilha(f)
+            # SOMENTE no modo colunas damos nomes distintos
+            if modo == 'colunas' and df_i.shape[1] == 1 and str(df_i.columns[0]).lower().startswith(("col_", "valor")):
+                df_i.columns = [Path(f.filename).stem]
             dfs.append(df_i)
+            app.logger.info("UNIR - %s: %d linhas, %d colunas | cols=%s",
+                            f.filename, len(df_i), df_i.shape[1], list(map(str, df_i.columns)))
 
         if not dfs:
-            return jsonify({"success": False, "error": "Nenhum dado lido dos arquivos enviados."}), 400
+            return jsonify({"success": False, "error": "Nenhum dado útil nos arquivos enviados."}), 400
 
-        # União de colunas com ordem estável (primeira ocorrência prevalece)
-        all_cols, seen = [], set()
-        for df in dfs:
-            for c in df.columns:
-                if c not in seen:
-                    seen.add(c); all_cols.append(c)
+        import pandas as pd
 
-        dfs_norm = [df.reindex(columns=all_cols, fill_value="") for df in dfs]
-        df_final = pd.concat(dfs_norm, ignore_index=True)
-        app.logger.info("UNIR - TOTAL após concat: %d linhas, %d colunas", len(df_final), df_final.shape[1])
-
-        # Nome e extensão de saída
-        nome_saida = (request.form.get('nome_saida_uniao') or 'uniao_resultado.xlsx').strip()
-        if not nome_saida:
-            nome_saida = 'uniao_resultado.xlsx'
-        ext = Path(nome_saida).suffix.lower()
-        allowed_ext = {'.xlsx', '.xls', '.csv'}
-        if ext not in allowed_ext:
-            nome_saida += '.xlsx'
-            ext = '.xlsx'
-
-        caminho_saida = os.path.join(BASE_OUTPUT_DIR, secure_filename(nome_saida))
-        if ext == '.csv':
-            df_final.to_csv(caminho_saida, index=False, sep=';', encoding='utf-8-sig')
+        if modo == 'colunas':
+            # Lado a lado: alinhar pelo índice
+            dfs_alinhados = [d.reset_index(drop=True) for d in dfs]
+            df_final = pd.concat(dfs_alinhados, axis=1)
         else:
-            df_final.to_excel(caminho_saida, index=False)
+            # Por linhas: garantir mesmo cabeçalho quando TODOS têm 1 coluna
+            if all(d.shape[1] == 1 for d in dfs):
+                for d in dfs:
+                    d.columns = ['VALOR']  # nome comum para empilhar
+                df_final = pd.concat(dfs, ignore_index=True, sort=False)
+            else:
+                # superconjunto de colunas mantendo ordem da 1ª ocorrência
+                all_cols, seen = [], set()
+                for d in dfs:
+                    for c in d.columns:
+                        if c not in seen:
+                            seen.add(c); all_cols.append(c)
+                dfs_norm = [d.reindex(columns=all_cols, fill_value="") for d in dfs]
+                df_final = pd.concat(dfs_norm, ignore_index=True, sort=False)
 
-        return send_file(
-            caminho_saida,
-            as_attachment=True,
-            download_name=os.path.basename(caminho_saida),
-            mimetype="application/octet-stream",
-            etag=False, conditional=False, max_age=0
-        )
+        app.logger.info("UNIR - TOTAL: %d linhas, %d colunas", len(df_final), df_final.shape[1])
+
+        nome_saida = (request.form.get('nome_saida_uniao') or 'uniao_resultado.xlsx').strip() or 'uniao_resultado.xlsx'
+        ext = Path(nome_saida).suffix.lower()
+        if ext not in {'.xlsx', '.xls', '.csv'}:
+            nome_saida += '.xlsx'; ext = '.xlsx'
+
+        caminho = os.path.join(BASE_OUTPUT_DIR, secure_filename(nome_saida))
+        if ext == '.csv':
+            df_final.to_csv(caminho, index=False, sep=';', encoding='utf-8-sig')
+        else:
+            df_final.to_excel(caminho, index=False)
+
+        return send_file(caminho, as_attachment=True,
+                         download_name=os.path.basename(caminho),
+                         mimetype="application/octet-stream",
+                         etag=False, conditional=False, max_age=0)
     except Exception as e:
         app.logger.error(f"Erro em /process/unir: {e}")
         return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
+
+
 
 
 @app.route('/process/dividir', methods=['POST'])
@@ -668,15 +820,8 @@ def process_dividir():
         shutil.rmtree(dir_temp)
        
         # Envia o arquivo .zip para o usuário.
-        return send_file(
-            caminho_zip,
-            as_attachment=True,
-            download_name=os.path.basename(caminho_zip), # garante nome correto
-            mimetype="application/octet-stream",
-            etag=False,
-            conditional=False,
-            max_age=0
-        )
+        return _send_and_cleanup(caminho_zip, os.path.basename(caminho_zip))
+
     except Exception as e:
         # ALTERAÇÃO PRINCIPAL: Em caso de erro, retorna uma resposta JSON
         # em vez de redirecionar a página.
@@ -1161,22 +1306,12 @@ def duplicadas_split_page():
     return render_template('duplicadas_split.html')
 
 # Alias para quem digitar "duplicados" (sem o 'a')
-@app.route('/duplicados_split.html')
-@require_login
-def duplicados_split_alias():
-    return render_template('duplicadas_split.html')
+#@app.route('/duplicados_split.html')
+#@require_login
+#def duplicados_split_alias():
+#    return render_template('duplicadas_split.html')
 
 
-
-def _parse_datetime_flex(s: pd.Series) -> pd.Series:
-    """Converte datas em série pandas robustamente (BR dayfirst, serial Excel)."""
-    x = s.copy()
-    if pd.api.types.is_datetime64_any_dtype(x):
-        return x
-    num_mask = pd.to_numeric(x, errors="coerce")
-    dt_excel = pd.to_datetime(num_mask, origin="1899-12-30", unit="D", errors="coerce")
-    dt_str = pd.to_datetime(x, dayfirst=True, errors="coerce")  # Brasil
-    return dt_str.fillna(dt_excel)
 
 
 @app.route('/process/duplicadas_split', methods=['POST'])
@@ -1243,8 +1378,9 @@ def process_duplicadas_split():
         min_dt = grp.transform('min')
         max_dt = grp.transform('max')
 
-        antigas_mask  = df_dup['__DT__'].eq(min_dt) | df_dup['__DT__'].isna() & min_dt.isna()
-        recentes_mask = df_dup['__DT__'].eq(max_dt) | df_dup['__DT__'].isna() & max_dt.isna()
+        antigas_mask  = (df_dup['__DT__'].eq(min_dt)) | (df_dup['__DT__'].isna() & min_dt.isna())
+        recentes_mask = (df_dup['__DT__'].eq(max_dt)) | (df_dup['__DT__'].isna() & max_dt.isna())
+
 
         df_antigas  = df_dup[antigas_mask].drop(columns=['__KEY__','__DT__'])
         df_recentes = df_dup[recentes_mask].drop(columns=['__KEY__','__DT__'])
@@ -1310,6 +1446,21 @@ def process_duplicadas_split():
 
 
 
+from flask import after_this_request
+
+def _send_and_cleanup(path, download_name=None):
+    @after_this_request
+    def _cleanup(response):
+        try: os.remove(path)
+        except Exception: pass
+        return response
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=download_name or os.path.basename(path),
+        mimetype="application/octet-stream",
+        etag=False, conditional=False, max_age=0
+    )
 
 
 
