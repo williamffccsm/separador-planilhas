@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Planilhex: Resolver Duplicados por Data</title>
+  <meta name="description" content="Escolha a coluna-chave e a coluna de data. Exclua o mais recente ou o mais antigo apenas entre duplicados."/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    :root{
+      --neon-green:#00ff00;--text-color:#f5f5f5;--bg-translucent:rgba(255,255,255,.03);
+      --border-translucent:rgba(255,255,255,.1);--neon-shadow:0 0 15px rgba(0,255,0,.4);
+      --error-bg:rgba(255,50,50,.15);--error-border:rgba(255,50,50,.3);--neon-red:#ff3333
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{min-height:100vh;background:#000;display:flex;align-items:center;justify-content:center;padding:1.5rem;font-family:'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text-color)}
+
+    .container{
+      background:var(--bg-translucent);border-radius:1.5rem;
+      box-shadow:0 0 25px rgba(255,255,255,.1),0 0 50px rgba(0,255,0,.05),inset 0 1px 0 rgba(255,255,255,.1);
+      width:1200px;min-height:740px;max-width:95vw;border:1px solid var(--border-translucent);
+      backdrop-filter:blur(20px);position:relative;transition:all .4s cubic-bezier(.4,0,.2,1);overflow:hidden
+    }
+    .container::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--neon-green),transparent);opacity:.6}
+    .container:hover{box-shadow:0 0 35px rgba(255,255,255,.15),0 0 70px rgba(0,255,0,.1),inset 0 1px 0 rgba(255,255,255,.2);border-color:rgba(0,255,0,.3);transform:translateY(-2px)}
+    .content{padding:2.5rem}
+
+    /* Header */
+    .header{position:relative;text-align:center;margin-bottom:1rem}
+    .menu-toggle{
+      position:absolute;top:0;left:0;background:var(--bg-translucent);border:1px solid var(--border-translucent);
+      border-radius:.5rem;padding:.5rem;cursor:pointer;transition:all .3s cubic-bezier(.4,0,.2,1);display:flex;z-index:1001
+    }
+    .menu-toggle:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow)}
+    .menu-toggle svg{stroke:var(--neon-green)}
+    .header .actions{position:absolute;top:0;right:0;display:flex;gap:.5rem;padding:.5rem;z-index:1101}
+    .btn-logout-top{
+      background:linear-gradient(135deg,rgba(255,51,51,.10),rgba(255,51,51,.08));color:var(--text-color);
+      border:1px solid var(--error-border);border-radius:.75rem;padding:.55rem 1rem;display:inline-flex;align-items:center;gap:.5rem;
+      text-decoration:none;font-weight:600;transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease,background .2s ease
+    }
+    .btn-logout-top:hover{background:linear-gradient(135deg,rgba(255,51,51,.15),rgba(255,51,51,.25));border-color:var(--neon-red);box-shadow:0 0 15px rgba(255,51,51,.4),0 5px 15px rgba(255,51,51,.2);transform:translateY(-1px)}
+    .btn-logout-top svg{stroke:#fff}
+    .app-name h1{
+      font-size:2.5rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:.5rem;
+      background:linear-gradient(135deg,#fff,var(--neon-green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+      text-shadow:0 0 20px rgba(0,255,0,.3),0 2px 4px rgba(0,0,0,.8)
+    }
+    .app-name p{font-size:.95rem;color:rgba(245,245,245,.8);font-weight:300;letter-spacing:1px;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+    .page-title{text-align:center;margin-bottom:1.5rem}
+    .page-title h2{
+      font-size:1.75rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;
+      background:linear-gradient(135deg,#fff,var(--neon-green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+      text-shadow:0 0 15px rgba(0,255,0,.3),0 2px 4px rgba(0,0,0,.8)
+    }
+
+    /* Drawer */
+    .drawer-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);backdrop-filter:blur(5px);opacity:0;visibility:hidden;transition:opacity .3s ease,visibility .3s ease;z-index:1002}
+    .drawer-overlay.active{opacity:1;visibility:visible}
+    .drawer-menu{
+      position:fixed;top:0;left:-320px;width:320px;height:100%;background:linear-gradient(180deg,rgba(0,0,0,.95),rgba(10,10,10,.98));
+      border-right:1px solid var(--neon-green);box-shadow:0 0 50px rgba(0,255,0,.3);transition:left .3s cubic-bezier(.4,0,.2,1);
+      z-index:1003;overflow-y:auto;padding:2rem 1.5rem
+    }
+    .drawer-menu.active{left:0}
+    .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid var(--border-translucent)}
+    .drawer-title{font-size:1.5rem;font-weight:700;color:var(--neon-green);text-shadow:0 0 15px rgba(0,255,0,.5);letter-spacing:1.5px;text-transform:uppercase}
+    .drawer-close{background:transparent;border:none;cursor:pointer;padding:.5rem;display:flex;transition:all .3s ease}
+    .drawer-close:hover{transform:rotate(90deg)}
+    .drawer-close svg{stroke:var(--neon-green)}
+    .drawer-nav{display:flex;flex-direction:column;gap:.75rem}
+    .drawer-nav a{
+      background:var(--bg-translucent);border:1px solid var(--border-translucent);border-radius:.75rem;padding:1rem 1.25rem;color:var(--text-color);
+      text-decoration:none;font-weight:600;font-size:.95rem;transition:all .3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;gap:.75rem;position:relative;overflow:hidden;
+      text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:.5px
+    }
+    .drawer-nav a::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,0,.2),transparent);transition:left .5s ease}
+    .drawer-nav a:hover::before{left:100%}
+    .drawer-nav a:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);transform:translateX(5px)}
+    .drawer-nav a.logout-btn{margin-top:1rem;border-color:var(--neon-red)}
+    .drawer-nav a.logout-btn:hover{background:linear-gradient(135deg,rgba(255,51,51,.15),rgba(255,51,51,.25));border-color:var(--neon-red);box-shadow:0 0 15px rgba(255,51,51,.4),0 5px 15px rgba(255,51,51,.2)}
+    .drawer-nav a.active{border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25))}
+
+    /* Form */
+    .upload-section{margin-top:2rem;display:flex;flex-direction:column;gap:1.5rem}
+    .upload-btn{background:var(--bg-translucent);border:1px dashed var(--border-translucent);border-radius:.75rem;padding:1.5rem;text-align:center;cursor:pointer;transition:all .3s ease}
+    .upload-btn:hover{background:rgba(0,255,0,.1);border-color:var(--neon-green);box-shadow:var(--neon-shadow)}
+    .format-select,.base-select,.base-name{width:100%;padding:1rem;border:1px solid var(--border-translucent);border-radius:.75rem;background:rgba(0,0,0,.6);color:var(--text-color);font-size:.95rem;transition:all .3s cubic-bezier(.4,0,.2,1)}
+    .format-select:focus,.base-select:focus,.base-name:focus{border-color:var(--neon-green);background:rgba(0,0,0,.8);box-shadow:var(--neon-shadow),inset 0 1px 3px rgba(0,0,0,.3);outline:none}
+    .file-item{background:rgba(0,0,0,.4);border:1px solid var(--border-translucent);padding:.75rem 1rem;border-radius:.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;font-size:.9rem;transition:background .3s;margin-top:-.5rem}
+    .file-item:hover{background:rgba(0,255,0,.05);border-color:rgba(0,255,0,.2)}
+    .file-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,.8);flex-grow:1}
+    .clear-file-btn{color:var(--neon-red);font-size:.8rem;cursor:pointer;text-decoration:none;opacity:.7;transition:opacity .3s;white-space:nowrap}
+    .clear-file-btn:hover{opacity:1;text-decoration:underline}
+    .upload-section p{font-weight:600;color:var(--neon-green);text-shadow:0 0 8px rgba(0,255,0,.5);margin-top:.5rem;margin-bottom:-.75rem;text-align:left;padding-left:.5rem}
+
+    .action-btn{
+      background:linear-gradient(135deg,var(--bg-translucent),rgba(0,255,0,.1));color:var(--text-color);padding:1rem 2rem;border-radius:.75rem;font-weight:600;font-size:1rem;border:1px solid var(--border-translucent);
+      width:100%;cursor:pointer;transition:all .3s cubic-bezier(.4,0,.2,1);display:flex;align-items:center;justify-content:center;gap:.75rem;text-shadow:0 1px 2px rgba(0,0,0,.8);letter-spacing:1px;text-transform:uppercase;position:relative;overflow:hidden;margin-top:1rem
+    }
+    .action-btn::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,255,0,.2),transparent);transition:left .5s ease}
+    .action-btn:hover::before{left:100%}
+    .action-btn:hover{background:linear-gradient(135deg,rgba(0,255,0,.15),rgba(0,255,0,.25));border-color:var(--neon-green);box-shadow:var(--neon-shadow),0 5px 15px rgba(0,255,0,.2);transform:translateY(-2px)}
+    .action-btn:disabled{opacity:.7;cursor:not-allowed;transform:none}
+
+    .progress-area,.success-message,.download-area,.footer{margin-top:1.5rem;padding:1rem;border-radius:.75rem;background:var(--bg-translucent);border:1px solid var(--border-translucent);text-align:center;display:none}
+    .progress-area.show,.success-message.show,.download-area.show{display:block}
+    .success-message{background:rgba(0,255,0,.1);border-color:var(--neon-green);animation:fadeIn .5s ease-in}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    .fireworks{position:relative;width:100%;height:100px;overflow:hidden}
+    .firework{position:absolute;width:5px;height:5px;background:var(--neon-green);border-radius:50%;animation:explode 1s ease-out forwards;box-shadow:0 0 10px var(--neon-green),0 0 20px var(--neon-green)}
+    @keyframes explode{0%{transform:scale(0);opacity:1}100%{transform:scale(10);opacity:0}}
+    .footer{padding:1rem;background:transparent;border:none;display:block;font-size:.8rem;color:rgba(245,245,245,.5);animation:fadeOut 5s forwards}
+    @keyframes fadeOut{0%{opacity:1}100%{opacity:0}}
+
+    @media(max-width:850px){
+      .content{padding:2rem 1.25rem}
+      .app-name h1{font-size:2rem}
+      .page-title h2{font-size:1.25rem}
+    }
+  </style>
+</head>
+<body>
+  <!-- Drawer -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <div class="drawer-menu" id="drawerMenu">
+    <div class="drawer-header">
+      <span class="drawer-title">Menu</span>
+      <button class="drawer-close" id="drawerClose" aria-label="Fechar menu">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+    <nav class="drawer-nav">
+      <a href="/home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg><span>Home</span>
+      </a>
+      <a href="/unir.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><line x1="12" y1="22.08" x2="12" y2="12"></line>
+        </svg><span>Unir Planilhas</span>
+      </a>
+      <a href="/dividir.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line>
+        </svg><span>Particionar Planilhas</span>
+      </a>
+      <a href="/cruzar.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line>
+        </svg><span>Cruzar Dados</span>
+      </a>
+      <a href="/separar_por_coluna.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+        </svg><span>Separar por Coluna</span>
+      </a>
+      <a href="/duplicados.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg><span>Duplicados por Coluna</span>
+      </a>
+      <a href="/duplicados_resolver.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20v-6"></path><path d="M6 8l6-6 6 6"></path><path d="M6 12h12"></path>
+        </svg><span>Resolver Duplicados</span>
+      </a>
+      <a href="/duplicados_split.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="5 12 12 19 19 12"></polyline><polyline points="5 5 12 12 19 5"></polyline>
+        </svg><span>Duplicados (Antigas x Recentes)</span>
+      </a>
+      <a href="/notificacoes.html">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>
+        </svg><span>Conversor</span>
+      </a>
+      <a href="/logout" class="logout-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>
+        </svg><span>Sair</span>
+      </a>
+    </nav>
+  </div>
+
+  <div class="container">
+    <div class="content">
+      <header class="header">
+        <button class="menu-toggle" id="menuToggle" aria-label="Abrir menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="actions">
+          <a href="/logout" class="btn-logout-top" aria-label="Sair">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg><span>Sair</span>
+          </a>
+        </div>
+        <div class="app-name"><h1>Planilhex</h1><p>Automatizando Planilhas</p></div>
+      </header>
+
+      <div class="page-title"><h2>Resolver Duplicados por Data</h2></div>
+
+      <div class="upload-section">
+        <label class="upload-btn">
+          <span>+ Adicionar Planilha</span>
+          <input type="file" id="fileInput" accept=".xlsx,.xlsm,.xls,.txt,.csv" style="display:none">
+        </label>
+        <div id="fileDisplay" class="file-item" style="display:none">
+          <span class="file-name"></span>
+          <a href="#" id="clearFile" class="clear-file-btn">Limpar</a>
+        </div>
+
+        <p>Coluna-chave para detectar duplicados</p>
+        <select id="colunaChave" class="base-select">
+          <option value="">Selecione</option>
+        </select>
+
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" id="usarDigitos">
+          <span style="font-size:.9rem;color:rgba(245,245,245,.8)">Usar só dígitos na coluna-chave (ex.: CPF 000.000.000-00 → 00000000000)</span>
+        </label>
+
+        <p>Coluna de Data/Hora para decidir recente × antigo</p>
+        <select id="colunaData" class="base-select">
+          <option value="">Selecione</option>
+        </select>
+
+        <p>Critério</p>
+        <select id="criterio" class="base-select">
+          <option value="excluir_recente">Excluir o mais recente (manter o mais antigo)</option>
+          <option value="excluir_antigo">Excluir o mais antigo (manter o mais recente)</option>
+        </select>
+
+        <p>Nome do Arquivo de Saída</p>
+        <input type="text" id="nomeSaida" class="base-name" placeholder="resolvido.xlsx"/>
+
+        <button id="btnResolver" class="action-btn" disabled>Resolver e Baixar</button>
+
+        <div id="progressArea" class="progress-area"><p id="progressText">Aguarde, processando...</p></div>
+        <div id="successMessage" class="success-message"><p>Arquivo gerado com sucesso!</p><div id="fireworks" class="fireworks"></div></div>
+        <div id="downloadArea" class="download-area"><p>Clique para baixar:</p><a id="downloadLink" href="#" download="resolvido.xlsx">Download</a></div>
+
+        <div id="reportArea" class="progress-area" style="display:none">
+          <div style="text-align:left; line-height:1.6">
+            <p><b>Total de linhas (antes):</b> <span id="rTotalAntes">-</span></p>
+            <p><b>Linhas duplicadas:</b> <span id="rLinhasDup">-</span></p>
+            <p><b>Grupos de duplicados:</b> <span id="rGruposDup">-</span></p>
+            <p><b>Total após exclusão:</b> <span id="rTotalApos">-</span></p>
+            <p><b>Linhas removidas:</b> <span id="rRemovidas">-</span></p>
+          </div>
+        </div>
+      </div>
+
+      <footer class="footer"><p>Continue organizando seus dados com Planilhex.</p></footer>
+    </div>
+  </div>
+
+  <!-- Worker para ler cabeçalhos rápidos (4 linhas) -->
+  <script type="text/worker" id="headerWorkerScript">
+    self.importScripts('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+    function guessHeaders(rows){
+      for (let i=0;i<Math.min(rows.length,4);i++){
+        const r = rows[i] || [];
+        const clean = r.map(x => (x==null?"":String(x).trim()));
+        const nonempty = clean.filter(Boolean);
+        const allDigits = nonempty.length>0 && nonempty.every(x => /^[0-9]+$/.test(x));
+        if (nonempty.length>=2 && !allDigits){
+          const width = Math.max(...rows.slice(0,4).map(a=>a.length), r.length, 1);
+          return Array.from({length:width},(_,j)=> clean[j] || `col_${j}`);
+        }
+      }
+      const f = rows[0] || [];
+      return f.length ? f.map((v,j)=> (v && String(v).trim()) || `col_${j}`) : ["col_0"];
+    }
+    self.onmessage = (ev)=>{
+      try{
+        const wb = XLSX.read(ev.data.fileData,{type:'array',sheetRows:4});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+        const headers = guessHeaders(rows);
+        self.postMessage({success:true, headers});
+      }catch(e){
+        self.postMessage({success:false, error:e.message});
+      }
+    };
+  </script>
+
+  <script>
+    // Drawer behavior + active link
+    (function(){
+      const menuToggle = document.getElementById('menuToggle');
+      const drawerMenu = document.getElementById('drawerMenu');
+      const drawerOverlay = document.getElementById('drawerOverlay');
+      const drawerClose = document.getElementById('drawerClose');
+      function openDrawer(){drawerMenu.classList.add('active');drawerOverlay.classList.add('active');document.body.style.overflow='hidden'}
+      function closeDrawer(){drawerMenu.classList.remove('active');drawerOverlay.classList.remove('active');document.body.style.overflow=''}
+      menuToggle.addEventListener('click', openDrawer);
+      drawerClose.addEventListener('click', closeDrawer);
+      drawerOverlay.addEventListener('click', closeDrawer);
+      const path = location.pathname.replace(/\/+$/,'');
+      document.querySelectorAll('.drawer-nav a[href]').forEach(a=>{
+        const href = a.getAttribute('href').replace(/\/+$/,'');
+        if(href && href===path) a.classList.add('active');
+        a.addEventListener('click', ()=>closeDrawer());
+      });
+    })();
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const fileInput = document.getElementById('fileInput');
+      const fileDisplay = document.getElementById('fileDisplay');
+      const fileNameSpan = fileDisplay.querySelector('.file-name');
+      const clearFileBtn = document.getElementById('clearFile');
+
+      const colunaChave = document.getElementById('colunaChave');
+      const colunaData  = document.getElementById('colunaData');
+      const usarDigitos = document.getElementById('usarDigitos');
+      const criterio    = document.getElementById('criterio');
+      const nomeSaida   = document.getElementById('nomeSaida');
+
+      const btnResolver   = document.getElementById('btnResolver');
+      const progressArea  = document.getElementById('progressArea');
+      const progressText  = document.getElementById('progressText');
+      const successMessage= document.getElementById('successMessage');
+      const fireworks     = document.getElementById('fireworks');
+      const downloadArea  = document.getElementById('downloadArea');
+      const downloadLink  = document.getElementById('downloadLink');
+
+      const reportArea  = document.getElementById('reportArea');
+      const rTotalAntes = document.getElementById('rTotalAntes');
+      const rLinhasDup  = document.getElementById('rLinhasDup');
+      const rGruposDup  = document.getElementById('rGruposDup');
+      const rTotalApos  = document.getElementById('rTotalApos');
+      const rRemovidas  = document.getElementById('rRemovidas');
+
+      let headerWorker;
+      try{
+        const blob = new Blob([ document.getElementById('headerWorkerScript').textContent ], {type:'application/javascript'});
+        headerWorker = new Worker(URL.createObjectURL(blob));
+        headerWorker.onmessage = (e)=>{
+          if(e.data.success){
+            const headers = e.data.headers;
+            const opts = headers.map(h => `<option value="${h}">${h||'(Coluna)'}</option>`).join('');
+            colunaChave.innerHTML = '<option value="">Selecione</option>'+opts;
+            colunaData.innerHTML  = '<option value="">Selecione</option>'+opts;
+          }else{
+            alert('Erro ao ler cabeçalho: '+e.data.error);
+            resetFile();
+          }
+          checkInputs();
+        };
+      }catch{}
+
+      function checkInputs(){
+        btnResolver.disabled = !(fileInput.files.length && colunaChave.value && colunaData.value);
+      }
+      function createFireworks(){
+        fireworks.innerHTML='';
+        for(let i=0;i<20;i++){
+          const f=document.createElement('div'); f.className='firework';
+          f.style.left=(Math.random()*100)+'%'; f.style.top=(Math.random()*50)+'%';
+          fireworks.appendChild(f); setTimeout(()=>f.remove(),1000);
+        }
+      }
+      function resetFile(){
+        fileInput.value=''; fileDisplay.style.display='none';
+        colunaChave.innerHTML = '<option value="">Selecione</option>';
+        colunaData.innerHTML  = '<option value="">Selecione</option>';
+        successMessage.classList.remove('show'); downloadArea.classList.remove('show');
+        reportArea.style.display = 'none';
+      }
+
+      fileInput.addEventListener('change', () => {
+        successMessage.classList.remove('show'); downloadArea.classList.remove('show');
+        reportArea.style.display = 'none';
+        if(!fileInput.files.length){ resetFile(); checkInputs(); return; }
+        fileNameSpan.textContent = fileInput.files[0].name; fileDisplay.style.display='flex';
+
+        const reader = new FileReader();
+        reader.onload = (e)=> headerWorker && headerWorker.postMessage({fileData: new Uint8Array(e.target.result)});
+        reader.readAsArrayBuffer(fileInput.files[0]);
+      });
+
+      clearFileBtn.addEventListener('click', (e)=>{ e.preventDefault(); resetFile(); checkInputs(); });
+      [colunaChave, colunaData].forEach(el => el.addEventListener('change', checkInputs));
+
+      btnResolver.addEventListener('click', async ()=>{
+        if(!fileInput.files.length || !colunaChave.value || !colunaData.value) return;
+        btnResolver.disabled = true;
+        progressArea.classList.add('show'); progressText.textContent = 'Aguarde, processando...';
+        successMessage.classList.remove('show'); downloadArea.classList.remove('show');
+        reportArea.style.display = 'none';
+
+        const fd = new FormData();
+        fd.append('arquivo', fileInput.files[0]);
+        fd.append('coluna_chave', colunaChave.value);
+        fd.append('coluna_data',  colunaData.value);
+        fd.append('criterio',     criterio.value);
+        fd.append('usar_digitos', usarDigitos.checked ? '1' : '0');
+        if (nomeSaida.value.trim()) fd.append('nome_saida', nomeSaida.value.trim());
+
+        try{
+          const r = await fetch('/process/duplicados_resolver', { method:'POST', body: fd });
+          if(!r.ok){ let j; try{ j = await r.json(); }catch{}; throw new Error(j?.error || ('Erro '+r.status)); }
+
+          const disp = r.headers.get('Content-Disposition') || '';
+          const m = disp.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+          const fname = decodeURIComponent(m?.[1] || m?.[2] || (nomeSaida.value.trim() || 'resolvido.xlsx'));
+
+          rTotalAntes.textContent = r.headers.get('X-Total-Linhas')      || '-';
+          rLinhasDup.textContent  = r.headers.get('X-Linhas-Duplicadas') || '-';
+          rGruposDup.textContent  = r.headers.get('X-Grupos-Duplicados') || '-';
+          rTotalApos.textContent  = r.headers.get('X-Total-Apos')        || '-';
+          rRemovidas.textContent  = r.headers.get('X-Removidas')         || '-';
+          reportArea.style.display = 'block';
+
+          const blob = await r.blob();
+          const url = URL.createObjectURL(blob);
+          downloadLink.href = url; downloadLink.download = fname;
+
+          progressArea.classList.remove('show');
+          successMessage.classList.add('show'); createFireworks();
+          downloadArea.classList.add('show');
+        }catch(e){
+          progressArea.classList.add('show'); progressText.textContent = 'Erro: ' + e.message + '. Verifique colunas e formatos de data.';
+        }finally{ btnResolver.disabled = false; }
+      });
+
+      try{ lucide.createIcons(); }catch{}
+    });
+  </script>
+</body>
+</html>
+

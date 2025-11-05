@@ -1,0 +1,9 @@
+RELATÓRIO DE PROCESSAMENTO - NOTIFICAÇÕES
+Gerado em: 2025-10-22 17:13:30
+Parâmetros: {'acao': 'IMPORTAR_TXT→CSV_UNICO'}
+Linhas lidas: 2372
+Header: 1 | Detalhes: 2370 | Trailer: 1
+Arquivo CSV header: None
+Arquivo CSV detalhe: None
+Arquivo CSV trailer: None
+Observações: campos seguem layout fixo 80 colunas.

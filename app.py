@@ -75,6 +75,20 @@ warnings.filterwarnings(
     category=UserWarning,
     module="openpyxl.styles.stylesheet"
 )
+
+# ---- LOGGING VERBOSO ----
+import logging, sys
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
+app.logger.setLevel(logging.INFO)
+logging.getLogger('werkzeug').setLevel(logging.INFO)
+# para garantir que prints apareçam
+print = lambda *a, **k: (__import__('builtins').print(*a, flush=True, **k))
+
+
 # ==============================================================================
 # 2. FUNÇÕES AUXILIARES
 # ==============================================================================
@@ -444,39 +458,7 @@ def process_separar():
     except Exception as e:
         print(f"[process_separar] erro: {e}")
         return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
-
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # -------------------- PÁGINA DUPLICADOS --------------------
 @app.route('/duplicados.html')
 @require_login
@@ -580,31 +562,7 @@ def process_duplicados():
                          mimetype="application/octet-stream", etag=False, conditional=False, max_age=0)
     except Exception as e:
         app.logger.error(f"[process_duplicados] erro: {e}")
-        return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
-# ==============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 5
 
 # --- ROTAS DE PROCESSAMENTO (AÇÕES DOS FORMULÁRIOS) ---
 @app.route('/process/unir', methods=['POST'])
@@ -726,71 +684,127 @@ def process_dividir():
         return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
     
 
+
+
+
+
+
+
+
+
+
+
+# ==== helpers de nomes/cabeçalho ====
+import unicodedata
+
+def _norm_name(s):
+    s = "" if s is None else str(s)
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = s.upper()
+    s = re.sub(r"[^A-Z0-9]+", " ", s)  # remove pontuação/espaços extras
+    return s.strip()
+
+def _match_col(df, asked):
+    mapa = {_norm_name(c): str(c) for c in df.columns}
+    return mapa.get(_norm_name(asked))
+
+def _try_promote_header(df: pd.DataFrame, target_name: str) -> pd.DataFrame:
+    tgt = _norm_name(target_name)
+    head = df.head(10).fillna("")
+    for ridx in head.index:
+        row_norm = [_norm_name(x) for x in head.loc[ridx].tolist()]
+        if tgt in row_norm:
+            new_cols = [str(x).strip() if str(x).strip() else f"col_{i}"
+                        for i, x in enumerate(df.loc[ridx].tolist())]
+            df2 = df.loc[ridx+1:].reset_index(drop=True).copy()
+            df2.columns = pd.Series(new_cols, dtype="object").astype(str).str.strip().str.replace(r"\s+"," ",regex=True)
+            return df2
+    return df
+
+
+
+
+
+
 @app.route('/process/cruzar', methods=['POST'])
 @require_login
 def process_cruzar():
     try:
+        # arquivos
         if 'primaria' not in request.files or not request.files['primaria'].filename:
             return jsonify({"success": False, "error": "A planilha primária não foi enviada."}), 400
         if 'secundaria' not in request.files or not request.files['secundaria'].filename:
             return jsonify({"success": False, "error": "A planilha secundária não foi enviada."}), 400
-
         file_primaria   = request.files['primaria']
         file_secundaria = request.files['secundaria']
-        coluna_primaria   = request.form.get('coluna_primaria')
-        coluna_secundaria = request.form.get('coluna_secundaria')
-        nome_saida = (request.form.get('nome_saida') or 'saida.xlsx').strip() or 'saida.xlsx'
 
+        # formulário
+        col_prim_form = (request.form.get('coluna_primaria') or '').strip()
+        col_sec_form  = (request.form.get('coluna_secundaria') or '').strip()
+        nome_saida    = (request.form.get('nome_saida') or 'saida.xlsx').strip() or 'saida.xlsx'
         new_column_name = request.form.get('new_column_name', 'Verificacao_Planilhex')
         found_value     = request.form.get('found_value', 'ENCONTRADO')
         not_found_value = request.form.get('not_found_value', 'NAO ENCONTRADO')
-
-        if not coluna_primaria or not coluna_secundaria:
+        if not col_prim_form or not col_sec_form:
             return jsonify({"success": False, "error": "É necessário selecionar a coluna base para ambas as planilhas."}), 400
 
-        df_primaria   = ler_planilha(file_primaria)
-        df_secundaria = ler_planilha(file_secundaria)
+        # leitura
+        df_prim = ler_planilha(file_primaria)
+        df_sec  = ler_planilha(file_secundaria)
 
-        if coluna_primaria not in df_primaria.columns:
-            return jsonify({"success": False, "error": f"Coluna '{coluna_primaria}' não encontrada na planilha primária."}), 400
-        if coluna_secundaria not in df_secundaria.columns:
-            return jsonify({"success": False, "error": f"Coluna '{coluna_secundaria}' não encontrada na planilha secundária."}), 400
+        # logs de diagnóstico
+        app.logger.info("CRUZAR: col_prim_form=%r col_sec_form=%r", col_prim_form, col_sec_form)
+        app.logger.info("PRIM cols=%s", list(map(str, df_prim.columns)))
+        app.logger.info("SEC  cols=%s", list(map(str, df_sec.columns)))
 
-        # conjuntos normalizados da primária
-        prim_text   = set(df_primaria[coluna_primaria].map(_norm_text));   prim_text.discard("")
-        prim_digits = set(df_primaria[coluna_primaria].map(_digits_only)); prim_digits.discard("")
+        # casar coluna; se não achar, tenta promover linha a cabeçalho
+        col_prim = _match_col(df_prim, col_prim_form)
+        if not col_prim:
+            df_prim = _try_promote_header(df_prim, col_prim_form)
+            col_prim = _match_col(df_prim, col_prim_form)
 
-        # séries normalizadas da secundária
-        sec_text   = df_secundaria[coluna_secundaria].map(_norm_text)
-        sec_digits = df_secundaria[coluna_secundaria].map(_digits_only)
+        col_sec = _match_col(df_sec, col_sec_form)
+        if not col_sec:
+            df_sec = _try_promote_header(df_sec, col_sec_form)
+            col_sec = _match_col(df_sec, col_sec_form)
 
-        # match por texto normalizado OU por dígitos
+        # valida nomes finais
+        if not col_prim:
+            return jsonify({"success": False,
+                            "error": f"Coluna '{col_prim_form}' não encontrada na planilha primária. "
+                                     f"Colunas: {', '.join(map(str, df_prim.columns))}"}), 400
+        if not col_sec:
+            return jsonify({"success": False,
+                            "error": f"Coluna '{col_sec_form}' não encontrada na planilha secundária. "
+                                     f"Colunas: {', '.join(map(str, df_sec.columns))}"}), 400
+
+        # matching por texto e dígitos
+        prim_text   = set(df_prim[col_prim].map(_norm_text));   prim_text.discard("")
+        prim_digits = set(df_prim[col_prim].map(_digits_only)); prim_digits.discard("")
+        sec_text    = df_sec[col_sec].map(_norm_text)
+        sec_digits  = df_sec[col_sec].map(_digits_only)
+
         mask = sec_text.isin(prim_text) | sec_digits.isin(prim_digits)
-        df_secundaria[new_column_name] = mask.map({True: found_value, False: not_found_value})
+        df_sec[new_column_name] = mask.map({True: found_value, False: not_found_value})
 
-        app.logger.info("[cruzar] prim_text=%d prim_digits=%d matches=%d total=%d",
-                        len(prim_text), len(prim_digits), int(mask.sum()), len(mask))
+        app.logger.info("[cruzar] prim='%s' sec='%s' prim_text=%d prim_digits=%d matches=%d total=%d",
+                        col_prim, col_sec, len(prim_text), len(prim_digits), int(mask.sum()), len(mask))
 
+        # saída
         caminho_saida = os.path.join(BASE_OUTPUT_DIR, secure_filename(nome_saida))
         if nome_saida.lower().endswith('.csv'):
-            df_secundaria.to_csv(caminho_saida, index=False, sep=';', encoding='utf-8-sig')
+            df_sec.to_csv(caminho_saida, index=False, sep=';', encoding='utf-8-sig')
         else:
-            df_secundaria.to_excel(caminho_saida, index=False)
+            df_sec.to_excel(caminho_saida, index=False)
 
-        return send_file(
-            caminho_saida,
-            as_attachment=True,
-            download_name=os.path.basename(caminho_saida),
-            mimetype="application/octet-stream",
-            etag=False, conditional=False, max_age=0
-        )
-
+        return send_file(caminho_saida, as_attachment=True,
+                         download_name=os.path.basename(caminho_saida),
+                         mimetype="application/octet-stream",
+                         etag=False, conditional=False, max_age=0)
     except Exception as e:
-        app.logger.error(f"Erro em /process/cruzar: {e}")
+        app.logger.exception("Erro em /process/cruzar")  # inclui traceback
         return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
-    
-
-
 
 def separar_por_coluna(df, coluna, valor_consta, valor_nao_consta, nome_consta, nome_nao_consta):
     """
@@ -816,6 +830,489 @@ def separar_por_coluna(df, coluna, valor_consta, valor_nao_consta, nome_consta, 
     except Exception as e:
         app.logger.error(f"Erro na função separar_por_coluna: {e}")
         raise ValueError(f"Erro ao separar por coluna: {e}")
+    
+
+
+# ===================== NOTIFICAÇÕES: CONVERSOR UNIVERSAL (atualizado) =====================
+# Entradas: .txt (fixo 80), .csv, .xls/.xlsx, .json
+# Saídas: csv_semicolon | csv_comma | tsv | xlsx | json | parquet
+
+def _rng(a,b): return slice(a-1, b)
+
+HEADER_MAP = {"CS_TIPO_REGISTRO": _rng(1,1),"NU_LINHA": _rng(2,9),"ID_CAMPANHA": _rng(10,15),
+              "CS_TIPO_CONTEUDO": _rng(16,23),"DT_GERACAO_ARQUIVO": _rng(24,31),
+              "HR_GERACAO_ARQUIVO": _rng(32,35),"FILLER": _rng(36,80)}
+DETALHE_MAP = {"CS_TIPO_REGISTRO": _rng(1,1),"NU_LINHA": _rng(2,9),"NU_NB": _rng(10,19),
+              "CS_ESPECIE": _rng(20,22),"ID_BANCO": _rng(23,25),"ID_ORGAO_PAGADOR": _rng(26,31),
+              "CS_MEIO_PAGAMENTO": _rng(32,33),"ID_OL_MANUTENCAO": _rng(34,41),"GEX": _rng(42,46),
+              "CS_RESPOSTA": _rng(47,48),"DT_VISUALIZACAO_NOTIFICACAO": _rng(49,56),
+              "HR_VISUALIZACAO_NOTIFICACAO": _rng(57,62),"CS_CANAL_NOTIFICACAO": _rng(63,64),
+              "FILLER": _rng(65,80)}
+TRAILER_MAP = {"CS_TIPO_REGISTRO": _rng(1,1),"NU_LINHA": _rng(2,9),"QT_REGISTROS": _rng(10,17),
+               "FILLER": _rng(18,80)}
+
+def _fw_extract(line:str, fmap:dict) -> dict:
+    return {k: line[v].rstrip() for k,v in fmap.items()}
+
+ALL_COLS = ["CS_TIPO_REGISTRO","NU_LINHA","ID_CAMPANHA","CS_TIPO_CONTEUDO","DT_GERACAO_ARQUIVO",
+            "HR_GERACAO_ARQUIVO","NU_NB","CS_ESPECIE","ID_BANCO","ID_ORGAO_PAGADOR","CS_MEIO_PAGAMENTO",
+            "ID_OL_MANUTENCAO","GEX","CS_RESPOSTA","DT_VISUALIZACAO_NOTIFICACAO","HR_VISUALIZACAO_NOTIFICACAO",
+            "CS_CANAL_NOTIFICACAO","QT_REGISTROS"]
+
+def _align_cols(df):
+    import pandas as pd
+    if df.empty: return pd.DataFrame(columns=ALL_COLS)
+    for c in ALL_COLS:
+        if c not in df.columns: df[c] = ""
+    return df[ALL_COLS]
+
+def _parse_notificacoes_txt_unificado(file_storage):
+    import pandas as pd
+    file_storage.seek(0)
+    raw = file_storage.read().decode("utf-8", errors="replace").splitlines()
+    lines = [ (ln[:80] + " "*80)[:80] for ln in raw if ln.strip() != "" ]
+    hdr_rows, det_rows, trl_rows = [], [], []
+    for ln in lines:
+        t = ln[0:1]
+        if t == "1": hdr_rows.append(_fw_extract(ln, HEADER_MAP))
+        elif t == "2": det_rows.append(_fw_extract(ln, DETALHE_MAP))
+        elif t == "3": trl_rows.append(_fw_extract(ln, TRAILER_MAP))
+    df_h, df_d, df_t = map(pd.DataFrame, (hdr_rows, det_rows, trl_rows))
+    if not df_d.empty and "NU_NB" in df_d.columns: df_d = df_d.sort_values("NU_NB")
+    df_all = pd.concat([_align_cols(df_h), _align_cols(df_d), _align_cols(df_t)], ignore_index=True)
+    return df_all, "TXT_FIXED_80"
+
+def _read_any_to_df(file_storage):
+    from pathlib import Path
+    ext = Path(file_storage.filename or "").suffix.lower()
+
+    if ext == ".txt":
+        df, dtype = _parse_notificacoes_txt_unificado(file_storage)
+        return df, dtype, "notificacoes"
+
+    if ext in {".xlsx", ".xls"}:
+        file_storage.seek(0)
+        df_raw = pd.read_excel(file_storage, header=None, dtype=str)
+        df = _fix_headers(df_raw).dropna(axis=1, how='all').fillna("")
+        return df, ext.upper().lstrip("."), Path(file_storage.filename).stem or "planilha"
+
+    if ext == ".csv":
+        import chardet, csv as _csv
+        file_storage.seek(0)
+        raw = file_storage.read()
+        enc = (chardet.detect(raw).get('encoding') or 'utf-8')
+        txt = raw.decode(enc, errors='replace')
+        sample = txt[:20000]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=';,\t|,')
+            sep = dialect.delimiter
+        except Exception:
+            sep = ';' if sample.count(';') >= sample.count(',') else ','
+        from io import StringIO
+        df_raw = pd.read_csv(StringIO(txt), sep=sep, header=None, dtype=str, on_bad_lines='skip', engine='python')
+        df = _fix_headers(df_raw).dropna(axis=1, how='all').fillna("")
+        return df, "CSV", Path(file_storage.filename).stem or "dados"
+
+    if ext == ".json":
+        file_storage.seek(0)
+        try:
+            df = pd.read_json(file_storage)
+        except ValueError:
+            file_storage.seek(0)
+            df = pd.read_json(file_storage, lines=True)
+        df = df.astype(str).fillna("")
+        return df, "JSON", Path(file_storage.filename).stem or "dados"
+
+    # fallback tenta TXT fixo
+    try:
+        df, dtype = _parse_notificacoes_txt_unificado(file_storage)
+        return df, dtype, "notificacoes"
+    except Exception:
+        raise ValueError("Formato de entrada não suportado. Use .txt, .csv, .xls, .xlsx ou .json.")
+
+def _save_df(df, out_format:str, base_dir:str, base_name:str):
+    out_format = (out_format or "csv_semicolon").lower()
+    ext_map = {
+        "csv_semicolon": ("csv", {"sep":";","encoding":"utf-8-sig"}),
+        "csv_comma":     ("csv", {"sep":",","encoding":"utf-8-sig"}),
+        "tsv":           ("tsv", {"sep":"\t","encoding":"utf-8-sig"}),
+        "xlsx":          ("xlsx", {}),
+        "json":          ("json", {}),
+        "parquet":       ("parquet", {}),
+    }
+    if out_format not in ext_map:
+        raise ValueError("Formato de saída inválido.")
+    ext, opts = ext_map[out_format]
+    # monta nome sem duplicar extensão
+    base = secure_filename((base_name or "convertido").rsplit(".",1)[0])
+    fname = f"{base}.{('csv' if ext in {'csv','tsv'} else ext)}"
+    fpath = os.path.join(base_dir, fname)
+
+    if ext in {"csv","tsv"}:
+        df.to_csv(fpath, index=False, sep=opts["sep"], encoding=opts["encoding"])
+    elif ext == "xlsx":
+        df.to_excel(fpath, index=False)
+    elif ext == "json":
+        df.to_json(fpath, orient="records", force_ascii=False)
+    else:  # parquet
+        try:
+            df.to_parquet(fpath, index=False)
+        except Exception as e:
+            raise ValueError(f"PARQUET indisponível: instale 'pyarrow' ou 'fastparquet'. Detalhe: {e}")
+    return fpath, fname
+
+@app.route('/notificacoes.html')
+@require_login
+def notificacoes_page():
+    return render_template('notificacoes.html')
+
+@app.route('/process/notificacoes_importar_txt', methods=['POST'])
+@require_login
+def notificacoes_importar_txt():
+    try:
+        if 'arquivo' not in request.files or not request.files['arquivo'].filename:
+            return jsonify({"success": False, "error": "Envie um arquivo."}), 400
+
+        arq = request.files['arquivo']
+        saida_fmt = (request.form.get('saida_formato') or 'csv_semicolon').strip().lower()
+        base_name = (request.form.get('nome_saida') or '').strip()
+
+        df, detected_type, suggested = _read_any_to_df(arq)
+        base_final = base_name or suggested or "convertido"
+
+        dir_temp = os.path.join(BASE_OUTPUT_DIR, f"conv_{uuid.uuid4().hex}")
+        os.makedirs(dir_temp, exist_ok=True)
+        out_path, out_name = _save_df(df, saida_fmt, dir_temp, base_final)
+
+        resp = send_file(
+            out_path,
+            as_attachment=True,
+            download_name=out_name,
+            mimetype="application/octet-stream",
+            etag=False, conditional=False, max_age=0
+        )
+        resp.headers['X-Input-Type'] = detected_type
+        resp.headers['X-Output-Format'] = saida_fmt.upper()
+        return resp
+    except Exception as e:
+        app.logger.error(f"[notificacoes_importar_txt] {e}")
+        return jsonify({"success": False, "error": f"Erro: {e}"}), 500
+
+
+
+
+
+
+
+
+#==========================================================================
+
+
+
+
+
+
+
+# ==== DUPLICADOS: resolver por data =================================================
+
+@app.route('/duplicados_resolver.html')
+@require_login
+def duplicados_resolver_page():
+    return render_template('duplicados_resolver.html')
+
+
+def _parse_datetime_flex(s: pd.Series) -> pd.Series:
+    """Converte datas em série pandas robustamente.
+    Suporta strings variadas, números Excel (serial), timestamps e vazio."""
+    x = s.copy()
+    if pd.api.types.is_datetime64_any_dtype(x):
+        return x
+
+    num_mask = pd.to_numeric(x, errors="coerce")
+    dt_excel = pd.to_datetime(num_mask, origin="1899-12-30", unit="D", errors="coerce")
+
+    dt_str1 = pd.to_datetime(x, dayfirst=True, errors="coerce")  # Brasil
+    dt_merged = dt_str1.fillna(dt_excel)
+    return dt_merged
+
+
+def _choose_idx_to_drop(group: pd.DataFrame, data_col: str, drop_newest: bool) -> list[int]:
+    """Recebe um grupo duplicado e retorna os índices a remover segundo a regra."""
+    dt = _parse_datetime_flex(group[data_col])
+
+    if drop_newest:
+        key_val = dt.min()     # manter o mais antigo
+        keep_idx = group.loc[dt == key_val].index.min()
+        drop_idx = [i for i in group.index if i != keep_idx]
+    else:
+        key_val = dt.max()     # manter o mais recente
+        keep_idx = group.loc[dt == key_val].index.min()
+        drop_idx = [i for i in group.index if i != keep_idx]
+
+    if pd.isna(dt).all():      # todas NaT: manter a primeira
+        keep_idx = group.index.min()
+        drop_idx = [i for i in group.index if i != keep_idx]
+    return drop_idx
+
+
+@app.route('/process/duplicados_resolver', methods=['POST'])
+@require_login
+def duplicados_resolver():
+    """
+    Entrada:
+      - arquivo: FileStorage
+      - coluna_chave: str  (onde detecta duplicados)
+      - coluna_data:  str  (usada para decidir recente/antigo)
+      - criterio: 'excluir_recente' | 'excluir_antigo'
+      - usar_digitos: '1' | '0'  (opcional; se '1' usa só dígitos na coluna-chave)
+      - nome_saida: nome do arquivo final (xlsx/csv)
+    Saída:
+      - arquivo com registros REMANESCENTES e headers com relatório.
+    """
+    try:
+        if 'arquivo' not in request.files or not request.files['arquivo'].filename:
+            return jsonify({"success": False, "error": "Nenhum arquivo enviado."}), 400
+
+        arquivo = request.files['arquivo']
+        df = ler_planilha(arquivo)
+
+        coluna_chave = (request.form.get('coluna_chave') or '').strip()
+        coluna_data  = (request.form.get('coluna_data')  or '').strip()
+        criterio     = (request.form.get('criterio')     or '').strip()
+        usar_digitos = (request.form.get('usar_digitos') or '0').strip() == '1'
+        nome_saida   = _ensure_xlsx((request.form.get('nome_saida') or 'resolvido.xlsx').strip() or 'resolvido.xlsx')
+
+        if not coluna_chave or not coluna_data or criterio not in {'excluir_recente', 'excluir_antigo'}:
+            return jsonify({"success": False, "error": "Parâmetros inválidos. Informe coluna_chave, coluna_data e critério."}), 400
+        if coluna_chave not in df.columns:
+            return jsonify({"success": False, "error": f"Coluna-chave '{coluna_chave}' não encontrada."}), 400
+        if coluna_data not in df.columns:
+            return jsonify({"success": False, "error": f"Coluna de data '{coluna_data}' não encontrada."}), 400
+
+        total_before = int(len(df))
+
+        chave_series = df[coluna_chave].astype(str)
+        if usar_digitos:
+            chave_series = chave_series.map(_digits_only)
+
+        chave_clean = chave_series.str.strip()
+        dup_mask = (chave_clean != "") & chave_clean.duplicated(keep=False)
+
+        if not dup_mask.any():
+            return jsonify({"success": False, "error": "Nenhum conjunto duplicado encontrado segundo a coluna-chave."}), 400
+
+        linhas_dup = int(dup_mask.sum())
+        grupos_dup = int(chave_clean[dup_mask].nunique())
+
+        df_dup = df[dup_mask].copy()
+        df_nd  = df[~dup_mask].copy()
+
+        drop_newest = (criterio == 'excluir_recente')
+        df_dup['_KEY_'] = chave_clean[dup_mask].values
+
+        to_drop = []
+        for _, g in df_dup.groupby('_KEY_', sort=False):
+            to_drop.extend(_choose_idx_to_drop(g, coluna_data, drop_newest=drop_newest))
+
+        df_final = pd.concat([df_nd, df_dup.drop(index=to_drop)], ignore_index=False).sort_index()
+        df_final = df_final.drop(columns=['_KEY_'], errors='ignore')
+
+        total_after = int(len(df_final))
+        removidas   = int(total_before - total_after)
+
+        out_path = os.path.join(BASE_OUTPUT_DIR, secure_filename(nome_saida))
+        if out_path.lower().endswith(".csv"):
+            df_final.to_csv(out_path, index=False, sep=';', encoding='utf-8-sig')
+        else:
+            df_final.to_excel(out_path, index=False)
+
+        resp = send_file(
+            out_path,
+            as_attachment=True,
+            download_name=os.path.basename(out_path),
+            mimetype="application/octet-stream",
+            etag=False, conditional=False, max_age=0
+        )
+        # Relatório via headers
+        resp.headers['X-Total-Linhas']      = str(total_before)
+        resp.headers['X-Linhas-Duplicadas'] = str(linhas_dup)
+        resp.headers['X-Grupos-Duplicados'] = str(grupos_dup)
+        resp.headers['X-Total-Apos']        = str(total_after)
+        resp.headers['X-Removidas']         = str(removidas)
+        return resp
+
+    except Exception as e:
+        app.logger.error(f"[duplicados_resolver] erro: {e}")
+        return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
+
+
+
+
+
+
+
+#########################################################################
+
+
+# ==== DUPLICADOS: separar em antigas × recentes (apenas duplicadas) ================
+@app.route('/duplicadas_split.html')
+@require_login
+def duplicadas_split_page():
+    return render_template('duplicadas_split.html')
+
+# Alias para quem digitar "duplicados" (sem o 'a')
+@app.route('/duplicados_split.html')
+@require_login
+def duplicados_split_alias():
+    return render_template('duplicadas_split.html')
+
+
+
+def _parse_datetime_flex(s: pd.Series) -> pd.Series:
+    """Converte datas em série pandas robustamente (BR dayfirst, serial Excel)."""
+    x = s.copy()
+    if pd.api.types.is_datetime64_any_dtype(x):
+        return x
+    num_mask = pd.to_numeric(x, errors="coerce")
+    dt_excel = pd.to_datetime(num_mask, origin="1899-12-30", unit="D", errors="coerce")
+    dt_str = pd.to_datetime(x, dayfirst=True, errors="coerce")  # Brasil
+    return dt_str.fillna(dt_excel)
+
+
+@app.route('/process/duplicadas_split', methods=['POST'])
+@require_login
+def process_duplicadas_split():
+    """
+    Entrada (multipart/form-data):
+      - arquivo: planilha
+      - coluna_chave: str (detecta duplicados)
+      - usar_digitos: '1'|'0'  (se '1', usa só dígitos da chave)
+      - coluna_data:  str (decide antigas × recentes entre as duplicadas)
+      - incluir_total: '1'|'0' (opcional; inclui um terceiro arquivo com TODAS as duplicadas)
+      - nome_antigas:  str (opcional; default 'duplicadas_antigas.xlsx')
+      - nome_recentes: str (opcional; default 'duplicadas_recentes.xlsx')
+      - nome_total:    str (opcional; só se incluir_total=1; default 'duplicadas_todas.xlsx')
+
+    Saída:
+      - Um .zip com 2 arquivos (antigas, recentes) ou 3 (se incluir_total=1).
+      - Headers com métricas (X-Total-Duplicadas, X-Grupos, X-Antigas, X-Recentes).
+    """
+    try:
+        if 'arquivo' not in request.files or not request.files['arquivo'].filename:
+            return jsonify({"success": False, "error": "Nenhum arquivo enviado."}), 400
+
+        arquivo = request.files['arquivo']
+        df = ler_planilha(arquivo)
+
+        coluna_chave = (request.form.get('coluna_chave') or '').strip()
+        coluna_data  = (request.form.get('coluna_data')  or '').strip()
+        usar_digitos = (request.form.get('usar_digitos') or '0').strip() == '1'
+        incluir_total = (request.form.get('incluir_total') or '0').strip() == '1'
+
+        nome_antigas  = _ensure_xlsx((request.form.get('nome_antigas')  or 'duplicadas_antigas.xlsx').strip() or 'duplicadas_antigas.xlsx')
+        nome_recentes = _ensure_xlsx((request.form.get('nome_recentes') or 'duplicadas_recentes.xlsx').strip() or 'duplicadas_recentes.xlsx')
+        nome_total    = _ensure_xlsx((request.form.get('nome_total')    or 'duplicadas_todas.xlsx').strip() or 'duplicadas_todas.xlsx')
+
+        if not coluna_chave or not coluna_data:
+            return jsonify({"success": False, "error": "Informe coluna_chave e coluna_data."}), 400
+        if coluna_chave not in df.columns:
+            return jsonify({"success": False, "error": f"Coluna-chave '{coluna_chave}' não encontrada."}), 400
+        if coluna_data not in df.columns:
+            return jsonify({"success": False, "error": f"Coluna de data '{coluna_data}' não encontrada."}), 400
+
+        # prepara chave para duplicidade
+        chave_series = df[coluna_chave].astype(str)
+        if usar_digitos:
+            chave_series = chave_series.map(_digits_only)
+        chave_clean = chave_series.str.strip()
+
+        dup_mask = (chave_clean != "") & chave_clean.duplicated(keep=False)
+        if not dup_mask.any():
+            return jsonify({"success": False, "error": "Nenhuma duplicata encontrada para a coluna selecionada."}), 400
+
+        # apenas duplicadas
+        df_dup = df[dup_mask].copy()
+        df_dup['__KEY__'] = chave_clean[dup_mask].values
+
+        # parse da data
+        df_dup['__DT__'] = _parse_datetime_flex(df_dup[coluna_data])
+
+        # separar antigas (mínimo por chave) e recentes (máximo por chave)
+        # empates: mantém TODAS as que empatarem no min/max
+        grp = df_dup.groupby('__KEY__', sort=False)['__DT__']
+        min_dt = grp.transform('min')
+        max_dt = grp.transform('max')
+
+        antigas_mask  = df_dup['__DT__'].eq(min_dt) | df_dup['__DT__'].isna() & min_dt.isna()
+        recentes_mask = df_dup['__DT__'].eq(max_dt) | df_dup['__DT__'].isna() & max_dt.isna()
+
+        df_antigas  = df_dup[antigas_mask].drop(columns=['__KEY__','__DT__'])
+        df_recentes = df_dup[recentes_mask].drop(columns=['__KEY__','__DT__'])
+
+        # métricas
+        total_dup = int(len(df_dup))
+        grupos = int(df_dup['__KEY__'].nunique())
+        qtd_antigas = int(len(df_antigas))
+        qtd_recentes = int(len(df_recentes))
+
+        # salvar em pasta temp
+        dir_temp = os.path.join(BASE_OUTPUT_DIR, f"dup_split_{uuid.uuid4().hex}")
+        os.makedirs(dir_temp, exist_ok=True)
+
+        def _save_any(df_out, path_name):
+            path = os.path.join(dir_temp, secure_filename(path_name))
+            if path.lower().endswith('.csv'):
+                df_out.to_csv(path, index=False, sep=';', encoding='utf-8-sig')
+            else:
+                df_out.to_excel(path, index=False)
+            return path
+
+        p_ant = _save_any(df_antigas, nome_antigas)
+        p_rec = _save_any(df_recentes, nome_recentes)
+
+        files_to_zip = [(p_ant, secure_filename(nome_antigas)),
+                        (p_rec, secure_filename(nome_recentes))]
+
+        if incluir_total:
+            p_tot = _save_any(df_dup.drop(columns=['__KEY__','__DT__']), nome_total)
+            files_to_zip.append((p_tot, secure_filename(nome_total)))
+
+        # zip
+        zip_path = os.path.join(BASE_OUTPUT_DIR, f"duplicadas_split_{uuid.uuid4().hex}.zip")
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for full, arc in files_to_zip:
+                zf.write(full, arcname=arc)
+
+        # limpar pasta temp
+        shutil.rmtree(dir_temp, ignore_errors=True)
+
+        resp = send_file(
+            zip_path,
+            as_attachment=True,
+            download_name=os.path.basename(zip_path),
+            mimetype="application/octet-stream",
+            etag=False, conditional=False, max_age=0
+        )
+        # headers de relatório
+        resp.headers['X-Total-Duplicadas'] = str(total_dup)
+        resp.headers['X-Grupos']            = str(grupos)
+        resp.headers['X-Antigas']           = str(qtd_antigas)
+        resp.headers['X-Recentes']          = str(qtd_recentes)
+        resp.headers['X-Incluiu-Total']     = '1' if incluir_total else '0'
+        return resp
+
+    except Exception as e:
+        app.logger.error(f"[process_duplicadas_split] erro: {e}")
+        return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
+
+
+
+
+
+
+
+
+
 # ======================================================================
 # 5. PONTO DE ENTRADA DA APLICAÇÃO
 # ======================================================================
