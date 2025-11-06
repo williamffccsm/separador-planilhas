@@ -779,55 +779,130 @@ def process_unir():
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 @app.route('/process/dividir', methods=['POST'])
 @require_login
 def process_dividir():
-    """Processa a divisão de uma planilha em múltiplos arquivos menores."""
+    """
+    Regra:
+      - Se codigo_manual: linha 1 = codigo_manual em A1; linha 2 = cabeçalho detectado; dados a partir da 1ª linha após o cabeçalho original.
+      - Se não houver codigo_manual: linha 1 = cabeçalho detectado; dados a seguir.
+    Nunca gravar header do pandas.
+    """
     try:
-        # --- Validações Iniciais ---
         if 'arquivo' not in request.files or not request.files['arquivo'].filename:
             return jsonify({"success": False, "error": "Nenhum arquivo selecionado."}), 400
         if not request.form.get('linhas_por_arquivo'):
             return jsonify({"success": False, "error": "O número de linhas por arquivo é obrigatório."}), 400
-        # --- Obtém os dados do formulário ---
+
         arquivo = request.files['arquivo']
         linhas_por_arquivo = int(request.form['linhas_por_arquivo'])
         nome_base = (request.form.get('nome_base') or 'dividido').strip() or 'dividido'
         formato_saida = (request.form.get('formato_saida') or 'xlsx').strip() or 'xlsx'
+        codigo_manual = (request.form.get('codigo_manual') or '').strip()
 
-        # --- Lógica de Processamento ---
-        df = ler_planilha(arquivo)
-        total_linhas = len(df)
-       
+        import pandas as pd, numpy as np, os, uuid, zipfile, shutil, re
+        from pathlib import Path
+        from werkzeug.utils import secure_filename
+
+        df = ler_planilha(arquivo)  # mantém tudo como veio
+
+        if df.empty:
+            return jsonify({"success": False, "error": "Arquivo vazio."}), 400
+
+        # --- detectar a linha do cabeçalho entre as 5 primeiras linhas ---
+        def is_texty(x):
+            s = str(x).strip()
+            if s == "" or s.lower() in {"nan","none","null","#n/a","n/a"}: return False
+            # considera "NB", "CPF_INTERESSADO", etc. como texto
+            return bool(re.search(r"[A-Za-zÀ-ÿ_]", s))
+
+        header_idx = None
+        scan_rows = min(len(df), 5)
+        best_score, best_idx = -1, 0
+        for i in range(scan_rows):
+            row = df.iloc[i]
+            score = sum(is_texty(v) for v in row)  # conta quantas células parecem texto
+            if score > best_score:
+                best_score, best_idx = score, i
+        header_idx = best_idx
+
+        # nomes das colunas
+        colunas = [str(v).strip() for v in df.iloc[header_idx].tolist()]
+        ncols = len(colunas)
+
+        # dados após o cabeçalho original
+        dados = df.iloc[header_idx+1:].copy()
+        dados.columns = colunas
+
+        # limpeza de NaN textual
+        NAN_STRINGS = {"nan","NaN","NAN","none","None","NULL","null","nil","Nulo","nulo","N/A","n/a","#N/A"}
+        def clean_cell(v):
+            if v is None or (isinstance(v, float) and np.isnan(v)): return ""
+            s = str(v).strip()
+            return "" if s in NAN_STRINGS else v
+
+        dados = dados.applymap(clean_cell)
+
+        # prefixo para cada parte
+        if codigo_manual:
+            code_row   = pd.DataFrame([[""] * ncols], columns=colunas)
+            code_row.iat[0, 0] = codigo_manual          # somente A1 recebe o código
+            header_row = pd.DataFrame([colunas], columns=colunas)
+            prefixo = pd.concat([code_row, header_row], ignore_index=True)
+        else:
+            prefixo = pd.DataFrame([colunas], columns=colunas)
+
+        total = len(dados)
         dir_temp = os.path.join(BASE_OUTPUT_DIR, str(uuid.uuid4()))
-        os.makedirs(dir_temp)
-        for i, start_row in enumerate(range(0, total_linhas, linhas_por_arquivo)):
-            bloco = df.iloc[start_row : start_row + linhas_por_arquivo]
-            nome_bloco = f"{nome_base}_{i+1}.{formato_saida}"
+        os.makedirs(dir_temp, exist_ok=True)
+
+        for i, start in enumerate(range(0, total, linhas_por_arquivo), start=1):
+            parte = dados.iloc[start:start+linhas_por_arquivo].copy()
+            bloco = pd.concat([prefixo, parte], ignore_index=True).reindex(columns=colunas)
+
+            nome_bloco = f"{nome_base}_{i}.{formato_saida}"
             caminho_bloco = os.path.join(dir_temp, secure_filename(nome_bloco))
-           
-            # Salva o bloco no formato escolhido
-            if formato_saida == 'csv':
-                bloco.to_csv(caminho_bloco, index=False, sep=';', encoding='utf-8-sig')
-            else: # Abrange .xlsx e .xls
-                bloco.to_excel(caminho_bloco, index=False)
-       
+
+            if formato_saida.lower() == 'csv':
+                bloco.to_csv(caminho_bloco, index=False, header=False, sep=';', encoding='utf-8-sig')
+            else:
+                with pd.ExcelWriter(caminho_bloco, engine='openpyxl') as w:
+                    bloco.to_excel(w, index=False, header=False)
+
         caminho_zip = os.path.join(BASE_OUTPUT_DIR, f"{secure_filename(nome_base)}_dividido.zip")
-        with zipfile.ZipFile(caminho_zip, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for file_path in Path(dir_temp).glob('*'):
-                zipf.write(file_path, arcname=file_path.name)
-       
+        with zipfile.ZipFile(caminho_zip, 'w', zipfile.ZIP_DEFLATED) as z:
+            for p in Path(dir_temp).glob('*'):
+                z.write(p, arcname=p.name)
+
         shutil.rmtree(dir_temp)
-       
-        # Envia o arquivo .zip para o usuário.
         return _send_and_cleanup(caminho_zip, os.path.basename(caminho_zip))
 
     except Exception as e:
-        # ALTERAÇÃO PRINCIPAL: Em caso de erro, retorna uma resposta JSON
-        # em vez de redirecionar a página.
         app.logger.error(f"Erro em /process/dividir: {e}")
         return jsonify({"success": False, "error": f"Ocorreu um erro no servidor: {e}"}), 500
-    
+
+
+
+
+
 
 
 
