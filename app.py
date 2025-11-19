@@ -861,6 +861,22 @@ def process_dividir():
 
         dados = dados.applymap(clean_cell)
 
+        # >>> NOVO TRECHO: remove duplicados por protocolo (e CPF fica automaticamente único) <<<
+        # Regra do seu processo: 1 protocolo pertence a 1 CPF.
+        # Então basta garantir que não existam protocolos repetidos.
+        # Vamos procurar qualquer coluna que tenha "protoc" no nome.
+        prot_cols = [c for c in dados.columns if 'protoc' in c.lower()]
+        if prot_cols:
+            # Mantém a primeira ocorrência e descarta as demais
+            antes = len(dados)
+            dados = dados.drop_duplicates(subset=prot_cols, keep='first')
+            depois = len(dados)
+            app.logger.info(
+                f"/process/dividir: removidas {antes - depois} linhas duplicadas por protocolo "
+                f"com base em {prot_cols}"
+            )
+        # <<< FIM DO NOVO TRECHO >>>
+
         # prefixo para cada parte
         if codigo_manual:
             code_row   = pd.DataFrame([[""] * ncols], columns=colunas)
